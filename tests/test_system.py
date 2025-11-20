@@ -44,7 +44,7 @@ class TestDoclingPaper:
         )
 
         # Load and process the paper
-        docs = pipeline.load_documents([str(docling_paper_path)])
+        docs = pipeline.load([str(docling_paper_path)])
 
         # Verify documents were loaded
         assert len(docs) > 0, "No documents were loaded from the PDF"
@@ -63,16 +63,16 @@ class TestDoclingPaper:
         )
 
         # Load documents
-        docs = pipeline.load_documents([str(docling_paper_path)])
+        docs = pipeline.load([str(docling_paper_path)])
 
         # Setup vectorstore
-        pipeline.setup_vectorstore(docs)
+        pipeline.store(docs)
 
         # Verify vectorstore was created
         assert pipeline.vectorstore is not None, "Vectorstore was not created"
 
         # Setup retriever
-        pipeline.setup_retriever()
+        pipeline.retrieve()
         assert pipeline.retriever is not None, "Retriever was not created"
 
     def test_main_ai_models_query(self, docling_paper_path, temp_dir):
@@ -83,9 +83,9 @@ class TestDoclingPaper:
         )
 
         # Process the document and setup retrieval
-        docs = pipeline.load_documents([str(docling_paper_path)])
-        pipeline.setup_vectorstore(docs)
-        pipeline.setup_retriever()
+        docs = pipeline.load([str(docling_paper_path)])
+        pipeline.store(docs)
+        pipeline.retrieve()
 
         # Perform the query
         results = pipeline.search(self.DEFAULT_QUERY)
@@ -146,9 +146,9 @@ class TestDoclingPaper:
         )
 
         # Setup once
-        docs = pipeline.load_documents([str(docling_paper_path)])
-        pipeline.setup_vectorstore(docs)
-        pipeline.setup_retriever()
+        docs = pipeline.load([str(docling_paper_path)])
+        pipeline.store(docs)
+        pipeline.retrieve()
 
         test_queries = [
             "What is Docling?",
@@ -174,9 +174,9 @@ class TestDoclingPaper:
             collection_name=collection_name, storage_dir=str(storage_dir), top_k=2
         )
 
-        docs = pipeline1.load_documents([str(docling_paper_path)])
-        pipeline1.setup_vectorstore(docs)
-        pipeline1.setup_retriever()
+        docs = pipeline1.load([str(docling_paper_path)])
+        pipeline1.store(docs)
+        pipeline1.retrieve()
 
         results1 = pipeline1.search(self.DEFAULT_QUERY)
         assert len(results1) > 0, "First pipeline returned no results"
@@ -189,8 +189,8 @@ class TestDoclingPaper:
         # Try to setup vectorstore (should load existing)
         try:
             # This should load the existing store, not create a new one
-            pipeline2.setup_vectorstore([])  # Empty docs since store should exist
-            pipeline2.setup_retriever()
+            pipeline2.store([])  # Empty docs since store should exist
+            pipeline2.retrieve()
 
             results2 = pipeline2.search(self.DEFAULT_QUERY)
             assert len(results2) > 0, "Second pipeline returned no results from persistent store"
@@ -202,7 +202,7 @@ class TestDoclingPaper:
 
         except Exception:
             # If loading fails, it's expected behavior - create new store
-            pipeline2.setup_vectorstore(docs)
-            pipeline2.setup_retriever()
+            pipeline2.store(docs)
+            pipeline2.retrieve()
             results2 = pipeline2.search(self.DEFAULT_QUERY)
             assert len(results2) > 0, "Second pipeline failed to create new vectorstore"

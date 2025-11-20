@@ -49,7 +49,7 @@ class RAGPipeline:
         self.vectorstore = None
         self.retriever = None
 
-    def load_documents(self, file_paths: list[str]):
+    def load(self, file_paths: list[str]):
         """Load documents using Docling loader."""
         loader = DoclingLoader(
             file_path=file_paths,
@@ -57,10 +57,18 @@ class RAGPipeline:
             chunker=HybridChunker(tokenizer=self.embed_model),
         )
 
-        docs = loader.load()
-        return docs
+        return loader.load()
 
-    def setup_vectorstore(self, documents):
+    def chunk(self, documents):
+        """Return pre-chunked documents."""
+        return documents
+
+    def embed(self, chunks):
+        """Initialize embeddings and pass through chunks."""
+        _ = self.embeddings
+        return chunks
+
+    def store(self, documents):
         """Set up or load existing Milvus vectorstore."""
         try:
             # Try opening existing Milvus store
@@ -81,7 +89,7 @@ class RAGPipeline:
                 drop_old=False,
             )
 
-    def setup_retriever(self):
+    def retrieve(self):
         """Initialize retriever."""
         self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.top_k})
 
@@ -94,22 +102,11 @@ class RAGPipeline:
         load_dotenv()
         file_paths = get_supported_files(input_path)
 
-        print("load")
-        documents = self.load_documents(file_paths)
-
-        print("chunk")
-        chunks = documents
-
-        print("embed")
-        _ = self.embeddings
-
-        print("store")
-        self.setup_vectorstore(chunks)
-
-        print("retrieve")
-        self.setup_retriever()
-
-        print("search")
+        documents = self.load(file_paths)
+        chunks = self.chunk(documents)
+        embedded_chunks = self.embed(chunks)
+        self.store(embedded_chunks)
+        self.retrieve()
         results = self.search(query)
 
         return results

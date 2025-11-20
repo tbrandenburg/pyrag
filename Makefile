@@ -9,8 +9,8 @@ help:
 	@echo "======================"
 	@echo ""
 	@echo "Quality Assurance:"
-	@echo "  lint      Run ruff linter"
 	@echo "  format    Format code with ruff"
+	@echo "  lint      Run ruff linter"
 	@echo "  test      Run all tests"
 	@echo "  qa        Run all quality assurance tasks (lint + format + test)"
 	@echo ""
@@ -27,20 +27,20 @@ help:
 	@echo "  make run ARGS='search .'   # Run with arguments"
 
 # Quality Assurance Tasks
-lint:
-	@echo "🔍 Running ruff linter..."
-	uv run ruff check src/ tests/
-
 format:
 	@echo "🎨 Formatting code with ruff..."
 	uv run ruff format src/ tests/
 	uv run ruff check --fix src/ tests/
 
+lint:
+	@echo "🔍 Running ruff linter..."
+	uv run ruff check src/ tests/
+
 test:
 	@echo "🧪 Running all tests..."
 	uv run pytest tests/ -v
 
-qa: lint format test
+qa: format lint test
 	@echo "✅ All quality assurance tasks completed successfully!"
 
 # Build & Run Tasks

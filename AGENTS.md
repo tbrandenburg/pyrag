@@ -24,19 +24,29 @@ pyrag/
 
 The Makefile provides automated workflows for managing agents:
 
-- **`make qa`**: Run all quality assurance agents (lint + format + test)
+- **`make qa`**: Run all quality assurance agents (format + lint + test)
 - **`make lint`**: Execute ruff linting agent
-- **`make format`**: Run code formatting agent
+- **`make format`**: Run code formatting and auto-fix agent
 - **`make test`**: Execute full test agent suite
 - **`make build`**: Package building agent
 - **`make run`**: CLI agent execution with arguments
 - **`make install`**: Dependency management agent
 - **`make clean`**: Cleanup and maintenance agent
 
+### Development Protocol
+
+**⚠️ IMPORTANT: Always run `make qa` after making any changes to the codebase.**
+
+This ensures:
+- 🎨 Code is properly formatted
+- 🔍 All linting rules are satisfied
+- 🧪 Tests pass and functionality is verified
+- 📦 The codebase remains in deployable state
+
 ### Example Usage
 
 ```bash
-# Run all quality assurance agents
+# REQUIRED: Run after any code changes
 make qa
 
 # Execute RAG pipeline agent with specific query

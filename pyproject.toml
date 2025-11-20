@@ -1,0 +1,95 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyrag"
+version = "0.1.0"
+description = "Docling-powered modular RAG CLI"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Tom Brandenburg", email = "tom@example.com" },
+]
+dependencies = [
+    "langchain>=1.0.8",
+    "langchain-core>=1.0.6",
+    "langchain-community>=0.4.1",
+    "langchain-text-splitters>=1.0.0",
+    "langchain-huggingface>=1.0.1",
+    "langchain-docling>=2.0.0",
+    "langchain-milvus>=0.3.0",
+    "docling>=2.62.0",
+    "huggingface-hub>=0.36.0",
+    "sentence-transformers>=3.0.1",
+    "torch>=1.13.0,<2.3.0",
+    "onnxruntime>=1.18.0",
+    "pymilvus>=2.6.0",
+    "milvus-lite>=2.4.7",
+    "python-dotenv>=1.0.1",
+    "typer>=0.12.5",
+    "rich>=13.9.1",
+    "numpy>=1.21.0,<2.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.3",
+    "pytest-mock>=3.14.0",
+    "pytest-env>=1.1.5", 
+    "ruff>=0.6.3",
+    "requests>=2.31.0",
+]
+
+[project.urls]
+Source = "https://github.com/tbrandenburg/pyrag"
+
+[project.scripts]
+pyrag = "pyrag.cli:main"
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pyrag"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings  
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "C4",  # flake8-comprehensions
+    "PIE", # flake8-pie
+    "SIM", # flake8-simplify
+]
+ignore = []
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+addopts = "-v"
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:docling_core.*",
+    "ignore::DeprecationWarning:docling.*", 
+    "ignore::UserWarning:milvus_lite.*",
+    "ignore::UserWarning:langchain_milvus.*",
+    "ignore:pkg_resources is deprecated:DeprecationWarning",
+    "ignore:The current process just got forked:UserWarning",
+    "ignore:.*tokenizers.*parallelism.*:UserWarning",
+]

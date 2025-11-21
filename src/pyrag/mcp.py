@@ -1,6 +1,5 @@
 """Minimal MCP interface for PyRAG tools."""
 
-
 from fastmcp import FastMCP
 
 from .config import DEFAULT_COLLECTION_NAME, DEFAULT_TOP_K
@@ -11,13 +10,13 @@ mcp = FastMCP("PyRAG 🤖")
 _rag_cache: dict[str, RAG] = {}
 
 
-def _get_rag(collection: str = DEFAULT_COLLECTION_NAME, top_k: int = DEFAULT_TOP_K) -> RAG:
-    """Get (or create) a cached RAG instance for the collection."""
+def _get_rag(top_k: int = DEFAULT_TOP_K) -> RAG:
+    """Get (or create) the cached RAG instance."""
 
-    rag = _rag_cache.get(collection)
+    rag = _rag_cache.get(DEFAULT_COLLECTION_NAME)
     if rag is None:
-        rag = RAG(collection_name=collection, top_k=top_k)
-        _rag_cache[collection] = rag
+        rag = RAG(collection_name=DEFAULT_COLLECTION_NAME, top_k=top_k)
+        _rag_cache[DEFAULT_COLLECTION_NAME] = rag
     else:
         rag.top_k = top_k
     return rag
@@ -53,38 +52,31 @@ def _document_summary(document) -> dict[str, str]:
 
 
 @mcp.tool
-def add_doc(path: str, collection: str = DEFAULT_COLLECTION_NAME) -> dict[str, str]:
-    """Index a file, URL, or directory into the collection."""
+def add_doc(path: str) -> dict[str, str]:
+    """Index a file, URL, or directory."""
 
-    rag = _get_rag(collection)
+    rag = _get_rag()
     rag.index(path)
-    return {
-        "ok": "indexed",
-        "collection": collection,
-        "source": path,
-    }
+    return {"ok": "indexed", "source": path}
 
 
 @mcp.tool
-def reset(collection: str = DEFAULT_COLLECTION_NAME) -> dict[str, str]:
+def reset() -> dict[str, str]:
     """Drop the collection and clear cached state."""
 
-    rag = _get_rag(collection)
+    rag = _get_rag()
     rag.reset()
-    return {"ok": "reset", "collection": collection}
+    return {"ok": "reset"}
 
 
 @mcp.tool
-def discover(
-    collection: str = DEFAULT_COLLECTION_NAME, limit: int = 20
-) -> dict[str, list[dict[str, str]]]:
+def discover(limit: int = 20) -> dict[str, list[dict[str, str]]]:
     """List a compact summary of indexed documents."""
 
-    rag = _get_rag(collection)
+    rag = _get_rag()
     documents = rag.discover()
     summaries = [_document_summary(doc) for doc in documents[:limit]]
     return {
-        "collection": collection,
         "count": len(documents),
         "docs": summaries,
     }
@@ -93,16 +85,14 @@ def discover(
 @mcp.tool
 def search(
     query: str,
-    collection: str = DEFAULT_COLLECTION_NAME,
     top_k: int = DEFAULT_TOP_K,
 ) -> dict[str, list[dict[str, str]]]:
     """Retrieve short answers for a query from the collection."""
 
-    rag = _get_rag(collection, top_k=top_k)
+    rag = _get_rag(top_k=top_k)
     results = rag.query(query)
     summaries = [_document_summary(doc) for doc in results[:top_k]]
     return {
-        "collection": collection,
         "query": query,
         "results": summaries,
     }

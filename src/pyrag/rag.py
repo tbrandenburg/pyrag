@@ -77,7 +77,9 @@ class RAG:
             ),
         )
 
-        return loader.load()
+        documents = loader.load()
+
+        return documents
 
     def chunk(self, documents):
         """Return pre-chunked documents."""
@@ -93,6 +95,23 @@ class RAG:
         # Use only content for ID generation to avoid issues with metadata loss
         # during vectorstore reload causing duplicate detection failures
         return hashlib.sha256(content.encode()).hexdigest()
+
+    def _ensure_vectorstore(self) -> bool:
+        """Ensure vectorstore is initialized. Returns True if successful, False otherwise."""
+        if self.vectorstore is None:
+            try:
+                # Try to connect to existing vectorstore
+                self.vectorstore = Milvus(
+                    embedding_function=self.embeddings,
+                    collection_name=self.collection_name,
+                    connection_args={"uri": self.milvus_uri},
+                    enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
+                )
+                return True
+            except Exception:
+                # No existing vectorstore, that's fine
+                return False
+        return True
 
     def store(self, documents):
         """Set up or load existing Milvus vectorstore with upsert for deduplication."""
@@ -133,6 +152,7 @@ class RAG:
                 embedding_function=self.embeddings,
                 collection_name=self.collection_name,
                 connection_args={"uri": self.milvus_uri},
+                enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
             )
             # Check if we can use the existing vectorstore (collection exists)
             try:
@@ -159,6 +179,7 @@ class RAG:
             index_params={"index_type": "FLAT"},
             drop_old=False,
             ids=ids,  # Use our generated IDs
+            enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
         )
 
     def reset(self):
@@ -169,6 +190,7 @@ class RAG:
                 embedding_function=self.embeddings,
                 collection_name=self.collection_name,
                 connection_args={"uri": self.milvus_uri},
+                enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
             )
 
             # Drop the collection if it exists
@@ -186,17 +208,8 @@ class RAG:
 
     def _load_existing_documents_catalog(self):
         """Load existing documents catalog from vectorstore if available."""
-        if self.vectorstore is None:
-            try:
-                # Try to connect to existing vectorstore
-                self.vectorstore = Milvus(
-                    embedding_function=self.embeddings,
-                    collection_name=self.collection_name,
-                    connection_args={"uri": self.milvus_uri},
-                )
-            except Exception:
-                # No existing vectorstore, that's fine
-                return
+        if not self._ensure_vectorstore():
+            return
 
         # Load documents from existing vectorstore
         existing_docs = self._load_documents_from_vectorstore()
@@ -213,14 +226,14 @@ class RAG:
             # Use the proper Milvus collection query method to get all documents
             # This is the recommended approach instead of dummy similarity search
             try:
-                # Use standard LangChain Milvus field names - no need for complex detection
-                # LangChain Milvus consistently uses 'text' for content
-                output_fields = ["text"]
+                # With enable_dynamic_field=True, metadata is stored dynamically
+                # We need to query for all fields using "*" to get dynamic metadata
+                output_fields = ["*"]
 
                 # Query all documents using a simple existence check
                 results = self.vectorstore.col.query(
                     expr="pk != ''",  # Get all documents with non-empty primary keys
-                    output_fields=output_fields,  # Use standard fields
+                    output_fields=output_fields,  # Get all fields including dynamic metadata
                 )
 
                 if not results:
@@ -232,17 +245,11 @@ class RAG:
                     # Extract text content
                     text_content = result.get("text", "")
 
-                    # Extract metadata if available
-                    metadata = result.get("metadata", {})
-                    if isinstance(metadata, str):
-                        try:
-                            import json
-
-                            metadata = json.loads(metadata)
-                        except json.JSONDecodeError:
-                            metadata = {}
-                    elif not isinstance(metadata, dict):
-                        metadata = {}
+                    # Build metadata from all fields except text, vector, and pk
+                    metadata = {}
+                    for key, value in result.items():
+                        if key not in ["text", "vector", "pk"]:
+                            metadata[key] = value
 
                     # Create Document object
                     doc = Document(page_content=text_content, metadata=metadata)
@@ -260,19 +267,8 @@ class RAG:
 
     def retrieve(self):
         """Initialize retriever from existing or current vectorstore."""
-        if self.vectorstore is None:
-            # Try to load existing vectorstore
-            try:
-                self.vectorstore = Milvus(
-                    embedding_function=self.embeddings,
-                    collection_name=self.collection_name,
-                    connection_args={"uri": self.milvus_uri},
-                )
-            except Exception as e:
-                raise ValueError(
-                    f"No existing vectorstore found and none created. "
-                    f"Run indexing first. Error: {e}"
-                ) from e
+        if not self._ensure_vectorstore():
+            raise ValueError("No existing vectorstore found and none created. Run indexing first.")
 
         # Load existing documents for BM25 if we don't have them yet
         if self.indexed_documents is None:

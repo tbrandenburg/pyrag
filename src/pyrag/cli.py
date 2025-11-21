@@ -9,6 +9,112 @@ app = typer.Typer(help="PyRAG - Docling-powered modular RAG CLI")
 console = Console()
 
 
+def _show_discovery_insights(console: Console, documents: list) -> None:
+    """Display comprehensive metadata-based insights for discovered documents."""
+
+    # Helper function to extract content type from Docling dl_meta
+    def get_content_type(doc):
+        dl_meta = doc.metadata.get("dl_meta", {})
+        doc_items = dl_meta.get("doc_items", [])
+        if doc_items:
+            return doc_items[0].get("label", "unknown")
+        return "unknown"
+
+    # Helper function to extract filename from Docling dl_meta
+    def get_filename(doc):
+        dl_meta = doc.metadata.get("dl_meta", {})
+        origin = dl_meta.get("origin", {})
+        return origin.get("filename")
+
+    # Analyze content types
+    content_types = {}
+    sources = {}
+    filenames = set()
+    total_content_length = 0
+
+    for doc in documents:
+        # Content type analysis using Docling metadata
+        content_type = get_content_type(doc)
+        if content_type not in content_types:
+            content_types[content_type] = []
+        content_types[content_type].append(doc)
+
+        # Source analysis
+        source = doc.metadata.get("source", "Unknown")
+        if source not in sources:
+            sources[source] = {"docs": [], "content_types": set()}
+        sources[source]["docs"].append(doc)
+        sources[source]["content_types"].add(content_type)
+
+        # Filename tracking using Docling metadata
+        filename = get_filename(doc)
+        if filename:
+            filenames.add(filename)
+
+        # Content length tracking
+        total_content_length += len(doc.page_content)
+
+    # Show content type summary
+    console.print("\n[bold yellow]📊 Content Type Distribution:[/bold yellow]")
+    for content_type, docs in sorted(content_types.items()):
+        icon = (
+            "📄"
+            if content_type == "text"
+            else "📊"
+            if content_type == "table"
+            else "💻"
+            if content_type == "code"
+            else "❓"
+        )
+        console.print(f"   {icon} [cyan]{content_type.title()}[/cyan]: {len(docs)} chunks")
+
+    # Show file summary
+    console.print("\n[bold yellow]📁 File Summary:[/bold yellow]")
+    console.print(f"   • [cyan]{len(filenames)}[/cyan] unique files processed")
+    console.print(f"   • [cyan]{len(sources)}[/cyan] unique sources indexed")
+    console.print(f"   • [cyan]{total_content_length:,}[/cyan] total characters indexed")
+
+    # Show sources with content type breakdown
+    console.print("\n[bold yellow]📂 Sources by Content Type:[/bold yellow]")
+    for source, info in sources.items():
+        docs = info["docs"]
+        content_breakdown = {}
+        for doc in docs:
+            ct = get_content_type(doc)
+            content_breakdown[ct] = content_breakdown.get(ct, 0) + 1
+
+        # Build content type summary string
+        ct_summary = ", ".join(
+            [f"{ct}({count})" for ct, count in sorted(content_breakdown.items())]
+        )
+
+        console.print(f"\n[cyan]📁 {source}[/cyan] ({len(docs)} chunks)")
+        console.print(f"   Content: {ct_summary}")
+
+        # Show sample content from each type
+        seen_types = set()
+        for doc in docs[:3]:  # Show up to 3 examples
+            ct = get_content_type(doc)
+            if ct not in seen_types:
+                seen_types.add(ct)
+                preview = doc.page_content[:150].strip().replace("\n", " ")
+                if len(doc.page_content) > 150:
+                    preview += "..."
+                icon = (
+                    "📄"
+                    if ct == "text"
+                    else "📊"
+                    if ct == "table"
+                    else "💻"
+                    if ct == "code"
+                    else "❓"
+                )
+                console.print(f"   {icon} [dim]{preview}[/dim]")
+
+        if len(docs) > 3:
+            console.print(f"   [dim]... and {len(docs) - 3} more chunks[/dim]")
+
+
 @app.command()
 def main_command(
     add_path: str = typer.Option(
@@ -72,29 +178,24 @@ def main_command(
                 )
                 console.print(f"[bold blue]Found {len(documents)} documents[/bold blue]")
 
-                # Group documents by source for better organization
-                sources = {}
-                for doc in documents:
-                    source = doc.metadata.get("source", "Unknown")
-                    if source not in sources:
-                        sources[source] = []
-                    sources[source].append(doc)
-
-                console.print("\n[bold yellow]Documents by Source:[/bold yellow]")
-                for source, docs in sources.items():
-                    console.print(f"\n[cyan]📁 {source}[/cyan] ({len(docs)} chunks)")
-                    # Show first few chunks with preview
-                    for i, doc in enumerate(docs[:3], 1):
-                        preview = doc.page_content[:150].strip().replace("\n", " ")
-                        if len(doc.page_content) > 150:
-                            preview += "..."
-                        console.print(f"   [dim]{i}. {preview}[/dim]")
-
-                    if len(docs) > 3:
-                        console.print(f"   [dim]... and {len(docs) - 3} more chunks[/dim]")
+                # Analyze metadata for insights
+                _show_discovery_insights(console, documents)
 
         # Search if query is provided
         if query:
+            # Helper functions for extracting Docling metadata (same as in discovery)
+            def get_content_type(doc):
+                dl_meta = doc.metadata.get("dl_meta", {})
+                doc_items = dl_meta.get("doc_items", [])
+                if doc_items:
+                    return doc_items[0].get("label", "unknown")
+                return "unknown"
+
+            def get_filename(doc):
+                dl_meta = doc.metadata.get("dl_meta", {})
+                origin = dl_meta.get("origin", {})
+                return origin.get("filename")
+
             results = rag.query(query)
             console.print(f"[bold green]Search Results for:[/bold green] {query}")
             console.print(f"[bold blue]Found {len(results)} results[/bold blue]")
@@ -107,10 +208,29 @@ def main_command(
                 if len(result.page_content) > 200:
                     preview += "..."
 
-                # Get source info if available
+                # Get metadata info using Docling metadata
                 source = result.metadata.get("source", "Unknown")
-                console.print(f"\n[cyan]{i}.[/cyan] {preview}")
-                console.print(f"   [dim]Source: {source}[/dim]")
+                content_type = get_content_type(result)
+                filename = get_filename(result)
+
+                # Content type icon
+                icon = (
+                    "📄"
+                    if content_type == "text"
+                    else "📊"
+                    if content_type == "table"
+                    else "💻"
+                    if content_type == "code"
+                    else "❓"
+                )
+
+                console.print(f"\n[cyan]{i}. {icon}[/cyan] {preview}")
+
+                # Show enhanced metadata
+                if filename:
+                    console.print(f"   [dim]📁 {filename} ({content_type})[/dim]")
+                else:
+                    console.print(f"   [dim]📁 {source} ({content_type})[/dim]")
 
             return results
         elif add_path:

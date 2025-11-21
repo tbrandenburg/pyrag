@@ -31,8 +31,8 @@ uv sync
 uv run python scripts/verify_installation.py
 
 # 3. Search your documents
-uv run pyrag /path/to/your/documents --query "What is this about?"
-uv run pyrag https://arxiv.org/pdf/2408.09869 --query "Which are the main AI models in Docling?"
+uv run pyrag --add /path/to/your/documents --query "What is this about?"
+uv run pyrag --add https://arxiv.org/pdf/2408.09869 --query "Which are the main AI models in Docling?"
 ```
 
 ## Installation
@@ -70,20 +70,23 @@ pip install -e .
 ### Command Line Interface
 
 ```bash
-# Basic usage - search in a directory
-uv run pyrag /path/to/documents
+# Basic usage - index documents
+uv run pyrag --add /path/to/documents
 
-# Search with a custom query
-uv run pyrag /path/to/documents --query "What are the main features?"
+# Index and search documents with a custom query
+uv run pyrag --add /path/to/documents --query "What are the main features?"
 
-# Search a URL with custom query
-uv run pyrag https://arxiv.org/pdf/2408.09869 --query "Which are the main AI models in Docling?"
+# Index and search a URL with custom query
+uv run pyrag --add https://arxiv.org/pdf/2408.09869 --query "Which are the main AI models in Docling?"
+
+# Search existing indexed documents only
+uv run pyrag --query "AI models"
 
 # Specify number of results
-uv run pyrag /path/to/documents --query "AI models" --top-k 10
+uv run pyrag --add /path/to/documents --query "AI models" --top-k 10
 
 # Use custom collection name
-uv run pyrag /path/to/documents --collection my_collection
+uv run pyrag --add /path/to/documents --collection my_collection
 
 # Get help
 uv run pyrag --help
@@ -93,7 +96,7 @@ uv run pyrag --help
 
 ```bash
 # Run as a module (legacy support)
-uv run python -m pyrag /path/to/documents
+uv run python -m pyrag --add /path/to/documents
 ```
 
 ### Python API
@@ -136,7 +139,7 @@ make test      # Run pytest test suite
 # Build and run
 make build     # Build the package
 make run       # Run CLI (shows help)
-make run ARGS="/path/to/docs --query 'your question'"
+make run ARGS="--add /path/to/docs --query 'your question'"
 
 # Maintenance
 make clean     # Clean build artifacts

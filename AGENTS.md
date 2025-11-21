@@ -43,6 +43,12 @@ This ensures:
 - 🧪 Tests pass and functionality is verified
 - 📦 The codebase remains in deployable state
 
+**⚠️ IMPORTANT: Never suppress warnings.**
+
+This ensures:
+- We do not ignore severe issues
+- We stay future-proof by considering deprecated features
+
 ### Example Usage
 
 ```bash
@@ -58,3 +64,18 @@ make test
 # Clean agent artifacts
 make clean
 ```
+
+## Technical Notes
+
+### Token Length Warnings
+The PyRAG pipeline may show warnings like:
+```
+Token indices sequence length is longer than the specified maximum sequence length for this model (584 > 512)
+```
+
+**This is expected behavior** according to Docling documentation. The `HybridChunker` triggers these warnings during token counting (not actual processing) to assess chunk sizes before splitting. The actual output chunks respect the configured limits.
+
+### LangChain Integration Best Practices
+- **Embedding/Tokenizer Compatibility**: Use the same model for both `HuggingFaceEmbeddings` and `HuggingFaceTokenizer.from_pretrained()` to ensure tokenization consistency with the embedding model
+- **Supported Models**: All sentence-transformers models support this approach as they share the same underlying tokenizer architecture
+- **Performance**: This pattern avoids double model loading and maintains tokenization consistency across the pipeline

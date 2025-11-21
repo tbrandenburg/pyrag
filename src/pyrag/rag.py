@@ -8,6 +8,7 @@ from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTok
 from dotenv import load_dotenv
 from langchain_classic.retrievers.ensemble import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
+from langchain_core.documents import Document
 from langchain_docling import DoclingLoader
 from langchain_docling.loader import ExportType
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
@@ -230,7 +231,6 @@ class RAG:
                 results = self.vectorstore.col.query(
                     expr="pk != ''",  # Get all documents with non-empty primary keys
                     output_fields=output_fields,  # Get available fields
-                    limit=16384,  # Milvus query result limit
                 )
 
                 if not results:
@@ -255,8 +255,6 @@ class RAG:
                         metadata = {}
 
                     # Create Document object
-                    from langchain_core.documents import Document
-
                     doc = Document(page_content=text_content, metadata=metadata)
                     documents.append(doc)
 

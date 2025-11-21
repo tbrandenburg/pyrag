@@ -3,7 +3,7 @@
 import typer
 from rich.console import Console
 
-from .pipeline import RAGPipeline
+from .rag import RAG
 
 app = typer.Typer(help="PyRAG - Docling-powered modular RAG CLI")
 console = Console()
@@ -32,7 +32,7 @@ def main_command(
         console.print("  or both to index and then search")
         return
 
-    pipeline = RAGPipeline(
+    rag = RAG(
         top_k=top_k,
         collection_name=collection_name,
     )
@@ -40,7 +40,7 @@ def main_command(
     try:
         # Index documents if add_path is provided
         if add_path:
-            pipeline.index(add_path)
+            rag.index(add_path)
             console.print(
                 f"[bold green]Successfully indexed documents from:[/bold green] {add_path}"
             )
@@ -48,7 +48,7 @@ def main_command(
 
         # Search if query is provided
         if query:
-            results = pipeline.query(query)
+            results = rag.query(query)
             console.print(f"[bold green]Search Results for:[/bold green] {query}")
             console.print(f"[bold blue]Found {len(results)} results[/bold blue]")
 

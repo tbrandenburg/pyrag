@@ -33,3 +33,6 @@ DEFAULT_EXPORT_TYPE = ExportType.DOC_CHUNKS
 DEFAULT_EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_COLLECTION_NAME = "docling_retriever_demo"
 DEFAULT_TOP_K = 5
+DEFAULT_MAX_TOKENS = 128  # Conservative limit well under 256 token model limit
+DEFAULT_OVERLAP_TOKENS = 10  # Minimal overlap to avoid token buildup
+DEFAULT_MILVUS_URI = "milvus_storage/docling.db"

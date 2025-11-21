@@ -102,10 +102,10 @@ uv run python -m pyrag --add /path/to/documents
 ### Python API
 
 ```python
-from pyrag.pipeline import RAGPipeline
+from pyrag.rag import RAG
 
 # Initialize the pipeline
-pipeline = RAGPipeline(top_k=5)
+pipeline = RAG(top_k=5)
 
 # Process documents and search
 results = pipeline.run("/path/to/documents", "What are the key concepts?")

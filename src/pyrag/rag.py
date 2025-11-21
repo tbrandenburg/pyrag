@@ -1,7 +1,6 @@
 """Main RAG pipeline implementation."""
 
 import hashlib
-import warnings
 from pathlib import Path
 
 from docling.chunking import HybridChunker
@@ -16,12 +15,15 @@ from .config import (
     DEFAULT_COLLECTION_NAME,
     DEFAULT_EMBED_MODEL,
     DEFAULT_EXPORT_TYPE,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MILVUS_URI,
+    DEFAULT_OVERLAP_TOKENS,
     DEFAULT_TOP_K,
 )
 from .utils import get_supported_files
 
 
-class RAGPipeline:
+class RAG:
     """Main RAG pipeline for document processing and retrieval."""
 
     def __init__(
@@ -30,19 +32,27 @@ class RAGPipeline:
         embed_model: str = DEFAULT_EMBED_MODEL,
         collection_name: str = DEFAULT_COLLECTION_NAME,
         top_k: int = DEFAULT_TOP_K,
-        storage_dir: str = "milvus_storage",
+        milvus_uri: str = DEFAULT_MILVUS_URI,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        overlap_tokens: int = DEFAULT_OVERLAP_TOKENS,
     ):
         self.export_type = export_type
         self.embed_model = embed_model
         self.collection_name = collection_name
         self.top_k = top_k
-        self.storage_dir = Path(storage_dir)
-        self.storage_dir.mkdir(exist_ok=True)
-        self.milvus_uri = str(self.storage_dir / "docling.db")
+        self.max_tokens = max_tokens
+        self.overlap_tokens = overlap_tokens
+        self.milvus_uri = milvus_uri
+        
+        # Ensure directory exists for local file URIs only
+        if not (milvus_uri.startswith('tcp://') or milvus_uri.startswith('http://') or milvus_uri.startswith('https://')):
+            milvus_path = Path(milvus_uri)
+            if milvus_path.parent != Path('.'):
+                milvus_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Initialize embeddings
         self.embeddings = HuggingFaceEmbeddings(model_name=self.embed_model)
-        
+
         self.vectorstore = None
         self.retriever = None
 
@@ -55,8 +65,8 @@ class RAGPipeline:
                 tokenizer=HuggingFaceTokenizer.from_pretrained(
                     model_name=self.embed_model,
                 ),
-                max_tokens=128,  # Very conservative - well under 256 token limit with safety margin
-                overlap_tokens=10,  # Minimal overlap to avoid token buildup
+                max_tokens=self.max_tokens,
+                overlap_tokens=self.overlap_tokens,
             ),
         )
 

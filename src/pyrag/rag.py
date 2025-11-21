@@ -213,24 +213,14 @@ class RAG:
             # Use the proper Milvus collection query method to get all documents
             # This is the recommended approach instead of dummy similarity search
             try:
-                # First, get collection schema to see what fields are available
-                schema_info = self.vectorstore.col.describe()
-                available_fields = []
-                if schema_info and hasattr(schema_info, "fields"):
-                    available_fields = [field.name for field in schema_info.fields]
-                else:
-                    # Fallback: try common field names
-                    available_fields = ["text", "pk"]
-
-                # Include metadata field only if it exists in the collection
+                # Use standard LangChain Milvus field names - no need for complex detection
+                # LangChain Milvus consistently uses 'text' for content
                 output_fields = ["text"]
-                if "metadata" in available_fields:
-                    output_fields.append("metadata")
 
                 # Query all documents using a simple existence check
                 results = self.vectorstore.col.query(
                     expr="pk != ''",  # Get all documents with non-empty primary keys
-                    output_fields=output_fields,  # Get available fields
+                    output_fields=output_fields,  # Use standard fields
                 )
 
                 if not results:

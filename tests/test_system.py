@@ -40,9 +40,9 @@ class TestDoclingPaper:
         # Initialize pipeline with temporary storage
         storage_dir = temp_dir / "milvus_storage"
         pipeline = RAG(
-            collection_name="test_docling_paper", 
-            milvus_uri=str(storage_dir / "docling.db"), 
-            top_k=3
+            collection_name="test_docling_paper",
+            milvus_uri=str(storage_dir / "docling.db"),
+            top_k=3,
         )
 
         # Load and process the paper
@@ -61,8 +61,7 @@ class TestDoclingPaper:
         """Test that vectorstore can be created and populated."""
         storage_dir = temp_dir / "milvus_storage"
         pipeline = RAG(
-            collection_name="test_docling_vectorstore", 
-            milvus_uri=str(storage_dir / "docling.db")
+            collection_name="test_docling_vectorstore", milvus_uri=str(storage_dir / "docling.db")
         )
 
         # Load documents
@@ -82,9 +81,9 @@ class TestDoclingPaper:
         """Test querying for main AI models in Docling."""
         storage_dir = temp_dir / "milvus_storage"
         pipeline = RAG(
-            collection_name="test_ai_models_query", 
-            milvus_uri=str(storage_dir / "docling.db"), 
-            top_k=5
+            collection_name="test_ai_models_query",
+            milvus_uri=str(storage_dir / "docling.db"),
+            top_k=5,
         )
 
         # Process the document and setup retrieval
@@ -124,9 +123,7 @@ class TestDoclingPaper:
         """Test the complete end-to-end pipeline."""
         storage_dir = temp_dir / "milvus_storage"
         pipeline = RAG(
-            collection_name="test_e2e_pipeline", 
-            milvus_uri=str(storage_dir / "docling.db"), 
-            top_k=3
+            collection_name="test_e2e_pipeline", milvus_uri=str(storage_dir / "docling.db"), top_k=3
         )
 
         # Run the indexing pipeline and then query
@@ -149,9 +146,9 @@ class TestDoclingPaper:
         """Test various queries on the same document."""
         storage_dir = temp_dir / "milvus_storage"
         pipeline = RAG(
-            collection_name="test_different_queries", 
-            milvus_uri=str(storage_dir / "docling.db"), 
-            top_k=3
+            collection_name="test_different_queries",
+            milvus_uri=str(storage_dir / "docling.db"),
+            top_k=3,
         )
 
         # Setup once
@@ -179,9 +176,7 @@ class TestDoclingPaper:
 
         # First pipeline - create and populate vectorstore
         pipeline1 = RAG(
-            collection_name=collection_name, 
-            milvus_uri=str(storage_dir / "docling.db"), 
-            top_k=2
+            collection_name=collection_name, milvus_uri=str(storage_dir / "docling.db"), top_k=2
         )
 
         docs = pipeline1.load([str(docling_paper_path)])
@@ -192,9 +187,7 @@ class TestDoclingPaper:
 
         # Second pipeline - should load existing vectorstore
         pipeline2 = RAG(
-            collection_name=collection_name, 
-            milvus_uri=str(storage_dir / "docling.db"), 
-            top_k=2
+            collection_name=collection_name, milvus_uri=str(storage_dir / "docling.db"), top_k=2
         )
 
         # Try to setup vectorstore (should load existing)

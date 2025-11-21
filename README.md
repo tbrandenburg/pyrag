@@ -6,6 +6,7 @@ A Docling-powered modular RAG (Retrieval-Augmented Generation) CLI tool for docu
 
 - **Multiple input formats**: Supports files, URLs, and directories
 - **Docling integration**: Advanced document parsing and chunking
+- **Hybrid search**: Automatic BM25 + vector retrieval with rank fusion
 - **Vector storage**: Persistent Milvus vector database
 - **Flexible retrieval**: Configurable top-k search
 - **CLI interface**: Easy-to-use command-line tool
@@ -70,7 +71,7 @@ pip install -e .
 ### Command Line Interface
 
 ```bash
-# Basic usage - index documents
+# Basic usage - index documents (enables automatic BM25 + vector hybrid search)
 uv run pyrag --add /path/to/documents
 
 # Index and search documents with a custom query
@@ -119,6 +120,8 @@ PyRAG uses sensible defaults but can be customized:
 - **Collection name**: `docling_retriever_demo`
 - **Top-k results**: `5`
 - **Storage directory**: `milvus_storage/`
+- **Hybrid search**: Automatic BM25 + vector retrieval (70% vector, 30% BM25 weights)
+- **Rank fusion constant**: `60`
 
 ## Development
 
@@ -217,6 +220,7 @@ PyRAG is built with a modular architecture:
 - **LangChain**: Document processing and vector store integration  
 - **Milvus**: Vector database for semantic search
 - **HuggingFace**: Embedding models
+- **rank-bm25**: BM25 scoring for hybrid search
 - **Typer**: CLI framework
 - **Rich**: Enhanced terminal output
 - **PyTorch**: ML framework (CPU version)

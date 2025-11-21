@@ -6,19 +6,24 @@ from pathlib import Path
 from docling.chunking import HybridChunker
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 from dotenv import load_dotenv
+from langchain_classic.retrievers.ensemble import EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
 from langchain_docling import DoclingLoader
 from langchain_docling.loader import ExportType
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_milvus import Milvus
 
 from .config import (
+    DEFAULT_BM25_WEIGHT,
     DEFAULT_COLLECTION_NAME,
     DEFAULT_EMBED_MODEL,
     DEFAULT_EXPORT_TYPE,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MILVUS_URI,
     DEFAULT_OVERLAP_TOKENS,
+    DEFAULT_RANK_FUSION_CONSTANT,
     DEFAULT_TOP_K,
+    DEFAULT_VECTOR_WEIGHT,
 )
 from .utils import get_supported_files
 
@@ -43,11 +48,12 @@ class RAG:
         self.max_tokens = max_tokens
         self.overlap_tokens = overlap_tokens
         self.milvus_uri = milvus_uri
-        
+        self.indexed_documents = None
+
         # Ensure directory exists for local file URIs only
-        if not (milvus_uri.startswith('tcp://') or milvus_uri.startswith('http://') or milvus_uri.startswith('https://')):
+        if not milvus_uri.startswith(("tcp://", "http://", "https://")):
             milvus_path = Path(milvus_uri)
-            if milvus_path.parent != Path('.'):
+            if milvus_path.parent != Path("."):
                 milvus_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Initialize embeddings
@@ -90,6 +96,9 @@ class RAG:
 
     def store(self, documents):
         """Set up or load existing Milvus vectorstore with upsert for deduplication."""
+        # Store documents for BM25
+        self.indexed_documents = documents
+
         # Generate deterministic IDs based on content
         ids = []
         for doc in documents:
@@ -148,11 +157,29 @@ class RAG:
                     f"Run indexing first. Error: {e}"
                 ) from e
 
-        self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.top_k})
+        vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.top_k})
+
+        # Use ensemble retriever with BM25 when documents are available
+        if self.indexed_documents:
+            # Create BM25 retriever
+            self.bm25_retriever = BM25Retriever.from_documents(self.indexed_documents)
+            self.bm25_retriever.k = self.top_k
+
+            # Use LangChain's built-in EnsembleRetriever with weighted rank fusion
+            self.retriever = EnsembleRetriever(
+                retrievers=[vector_retriever, self.bm25_retriever],
+                weights=[DEFAULT_VECTOR_WEIGHT, DEFAULT_BM25_WEIGHT],
+                c=DEFAULT_RANK_FUSION_CONSTANT,
+            )
+        else:
+            # Fallback to vector retriever if no indexed documents
+            self.retriever = vector_retriever
 
     def search(self, query: str):
         """Perform retrieval search."""
-        return self.retriever.invoke(query)
+        results = self.retriever.invoke(query)
+        # Ensure we return only top_k results (EnsembleRetriever might return more)
+        return results[: self.top_k]
 
     def index(self, input_path: str):
         """Index documents using the RAG pipeline."""

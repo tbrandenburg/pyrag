@@ -12,6 +12,7 @@ pyrag/
 │   ├── config.py           # Configuration
 │   └── utils.py            # Utilities
 ├── tests/                  # Testing framework
+├── docs/                   # Documentation
 ├── scripts/                # Scripts
 ├── .github/workflows/      # CI/CD automation agents
 │   └── test.yml            # GitHub Actions test agent

@@ -32,6 +32,7 @@ dependencies = [
     "rich>=13.9.1",
     "numpy>=1.21.0,<2.0.0",
     "rank-bm25>=0.2.2",
+    "fastmcp>=0.3.1",
 ]
 
 [dependency-groups]
@@ -48,6 +49,7 @@ Source = "https://github.com/tbrandenburg/pyrag"
 
 [project.scripts]
 pyrag = "pyrag.cli:main"
+"pyrag.mcp" = "pyrag.mcp:main"
 
 [tool.uv]
 package = true

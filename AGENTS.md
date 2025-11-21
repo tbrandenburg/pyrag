@@ -36,7 +36,7 @@ The Makefile provides automated workflows for managing agents:
 
 ### Development Protocol
 
-**⚠️ IMPORTANT: Always run `make qa` after making any changes to the codebase.**
+**⚠️ IMPORTANT: Always run `make qa-quick` after making any changes to the codebase.**
 
 This ensures:
 - 🎨 Code is properly formatted

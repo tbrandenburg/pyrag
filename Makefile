@@ -1,18 +1,21 @@
 # PyRAG Makefile
 # Provides common development tasks for the PyRAG project
 
-.PHONY: help lint format test qa build run clean install
+.PHONY: help lint format test unit-test system-test qa build run clean install
 
 # Default target
 help:
 	@echo "PyRAG Development Tasks"
 	@echo "======================"
 	@echo ""
-	@echo "Quality Assurance:"
-	@echo "  format    Format code with ruff"
-	@echo "  lint      Run ruff linter"
-	@echo "  test      Run all tests"
-	@echo "  qa        Run all quality assurance tasks (lint + format + test)"
+Quality Assurance:
+	@echo "  format      Format code with ruff"
+	@echo "  lint        Run ruff linter"
+	@echo "  test        Run all tests"
+	@echo "  unit-test   Run unit tests only"
+	@echo "  system-test Run system tests only"
+	@echo "  qa          Run all quality assurance tasks (lint + format + test)"
+	@echo "  qa-quick    Run all quick quality assurance tasks (lint + format + unit-test)"
 	@echo ""
 	@echo "Build & Run:"
 	@echo "  build     Build the package"
@@ -40,8 +43,19 @@ test:
 	@echo "🧪 Running all tests..."
 	uv run pytest tests/ -v
 
+unit-test:
+	@echo "🔬 Running unit tests..."
+	uv run pytest tests/test_unit.py -v
+
+system-test:
+	@echo "🏗️ Running system tests..."
+	uv run pytest tests/test_system.py -v
+
 qa: format lint test
 	@echo "✅ All quality assurance tasks completed successfully!"
+
+qa-quick: format lint unit-test
+	@echo "✅ All quick quality assurance tasks completed successfully!"
 
 # Build & Run Tasks
 build:

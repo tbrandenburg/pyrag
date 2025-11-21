@@ -126,12 +126,7 @@ class RAG:
 
         try:
             # Try opening existing Milvus store
-            self.vectorstore = Milvus(
-                embedding_function=self.embeddings,
-                collection_name=self.collection_name,
-                connection_args={"uri": self.milvus_uri},
-                enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
-            )
+            self.vectorstore = self._create_milvus_vectorstore()
             # Check if we can use the existing vectorstore (collection exists)
             try:
                 # Try to get collection info to verify it exists
@@ -164,12 +159,7 @@ class RAG:
         """Reset/clear the vector storage by dropping the collection."""
         try:
             # Try to connect to existing vectorstore
-            temp_vectorstore = Milvus(
-                embedding_function=self.embeddings,
-                collection_name=self.collection_name,
-                connection_args={"uri": self.milvus_uri},
-                enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
-            )
+            temp_vectorstore = self._create_milvus_vectorstore()
 
             # Drop the collection if it exists
             if hasattr(temp_vectorstore, "col") and temp_vectorstore.col is not None:
@@ -254,12 +244,7 @@ class RAG:
         if self.vectorstore is None:
             try:
                 # Try to connect to existing vectorstore
-                self.vectorstore = Milvus(
-                    embedding_function=self.embeddings,
-                    collection_name=self.collection_name,
-                    connection_args={"uri": self.milvus_uri},
-                    enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
-                )
+                self.vectorstore = self._create_milvus_vectorstore()
                 return True
             except Exception:
                 # No existing vectorstore, that's fine
@@ -324,3 +309,12 @@ class RAG:
         except Exception:
             # If loading fails, return None - will fallback to vector-only retrieval
             return None
+
+    def _create_milvus_vectorstore(self) -> Milvus:
+        """Create a Milvus vectorstore instance with consistent configuration."""
+        return Milvus(
+            embedding_function=self.embeddings,
+            collection_name=self.collection_name,
+            connection_args={"uri": self.milvus_uri},
+            enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
+        )

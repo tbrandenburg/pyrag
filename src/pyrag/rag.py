@@ -63,6 +63,7 @@ class RAG:
         self.vectorstore = None
         self.retriever = None
 
+    # Public methods
     def load(self, file_paths: list[str]):
         """Load documents using Docling loader."""
         loader = DoclingLoader(
@@ -89,29 +90,6 @@ class RAG:
         """Initialize embeddings and pass through chunks."""
         _ = self.embeddings
         return chunks
-
-    def _generate_content_id(self, content: str, source: str = "") -> str:
-        """Generate a deterministic ID based on document content only for deduplication."""
-        # Use only content for ID generation to avoid issues with metadata loss
-        # during vectorstore reload causing duplicate detection failures
-        return hashlib.sha256(content.encode()).hexdigest()
-
-    def _ensure_vectorstore(self) -> bool:
-        """Ensure vectorstore is initialized. Returns True if successful, False otherwise."""
-        if self.vectorstore is None:
-            try:
-                # Try to connect to existing vectorstore
-                self.vectorstore = Milvus(
-                    embedding_function=self.embeddings,
-                    collection_name=self.collection_name,
-                    connection_args={"uri": self.milvus_uri},
-                    enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
-                )
-                return True
-            except Exception:
-                # No existing vectorstore, that's fine
-                return False
-        return True
 
     def store(self, documents):
         """Set up or load existing Milvus vectorstore with upsert for deduplication."""
@@ -206,6 +184,88 @@ class RAG:
         self.retriever = None
         self.indexed_documents = None
 
+    def retrieve(self):
+        """Initialize retriever from existing or current vectorstore."""
+        if not self._ensure_vectorstore():
+            raise ValueError("No existing vectorstore found and none created. Run indexing first.")
+
+        # Load existing documents for BM25 if we don't have them yet
+        if self.indexed_documents is None:
+            self._load_existing_documents_catalog()
+
+        vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.top_k})
+
+        # Use ensemble retriever with BM25 when documents are available
+        if self.indexed_documents:
+            # Use complete document catalog for BM25
+            self.bm25_retriever = BM25Retriever.from_documents(self.indexed_documents)
+            self.bm25_retriever.k = self.top_k
+
+            # Use LangChain's built-in EnsembleRetriever with weighted rank fusion
+            self.retriever = EnsembleRetriever(
+                retrievers=[vector_retriever, self.bm25_retriever],
+                weights=[DEFAULT_VECTOR_WEIGHT, DEFAULT_BM25_WEIGHT],
+                c=DEFAULT_RANK_FUSION_CONSTANT,
+            )
+        else:
+            # Fallback to vector retriever if no documents available
+            self.retriever = vector_retriever
+
+    def search(self, query: str):
+        """Perform retrieval search."""
+        results = self.retriever.invoke(query)
+        # Ensure we return only top_k results (EnsembleRetriever might return more)
+        return results[: self.top_k]
+
+    def index(self, input_path: str):
+        """Index documents using the RAG pipeline."""
+        load_dotenv()
+        file_paths = get_supported_files(input_path)
+
+        documents = self.load(file_paths)
+        chunks = self.chunk(documents)
+        embedded_chunks = self.embed(chunks)
+        self.store(embedded_chunks)
+
+    def discover(self):
+        """Discover all indexed documents in the collection."""
+        # Load existing documents if we don't have them
+        if self.indexed_documents is None:
+            self._load_existing_documents_catalog()
+
+        return self.indexed_documents or []
+
+    def query(self, query_text: str):
+        """Perform a search query on the stored documents."""
+        # Always refresh retriever if not set (includes after new documents added)
+        if self.retriever is None:
+            self.retrieve()
+        return self.search(query_text)
+
+    # Private methods
+    def _generate_content_id(self, content: str, source: str = "") -> str:
+        """Generate a deterministic ID based on document content only for deduplication."""
+        # Use only content for ID generation to avoid issues with metadata loss
+        # during vectorstore reload causing duplicate detection failures
+        return hashlib.sha256(content.encode()).hexdigest()
+
+    def _ensure_vectorstore(self) -> bool:
+        """Ensure vectorstore is initialized. Returns True if successful, False otherwise."""
+        if self.vectorstore is None:
+            try:
+                # Try to connect to existing vectorstore
+                self.vectorstore = Milvus(
+                    embedding_function=self.embeddings,
+                    collection_name=self.collection_name,
+                    connection_args={"uri": self.milvus_uri},
+                    enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
+                )
+                return True
+            except Exception:
+                # No existing vectorstore, that's fine
+                return False
+        return True
+
     def _load_existing_documents_catalog(self):
         """Load existing documents catalog from vectorstore if available."""
         if not self._ensure_vectorstore():
@@ -264,61 +324,3 @@ class RAG:
         except Exception:
             # If loading fails, return None - will fallback to vector-only retrieval
             return None
-
-    def retrieve(self):
-        """Initialize retriever from existing or current vectorstore."""
-        if not self._ensure_vectorstore():
-            raise ValueError("No existing vectorstore found and none created. Run indexing first.")
-
-        # Load existing documents for BM25 if we don't have them yet
-        if self.indexed_documents is None:
-            self._load_existing_documents_catalog()
-
-        vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.top_k})
-
-        # Use ensemble retriever with BM25 when documents are available
-        if self.indexed_documents:
-            # Use complete document catalog for BM25
-            self.bm25_retriever = BM25Retriever.from_documents(self.indexed_documents)
-            self.bm25_retriever.k = self.top_k
-
-            # Use LangChain's built-in EnsembleRetriever with weighted rank fusion
-            self.retriever = EnsembleRetriever(
-                retrievers=[vector_retriever, self.bm25_retriever],
-                weights=[DEFAULT_VECTOR_WEIGHT, DEFAULT_BM25_WEIGHT],
-                c=DEFAULT_RANK_FUSION_CONSTANT,
-            )
-        else:
-            # Fallback to vector retriever if no documents available
-            self.retriever = vector_retriever
-
-    def search(self, query: str):
-        """Perform retrieval search."""
-        results = self.retriever.invoke(query)
-        # Ensure we return only top_k results (EnsembleRetriever might return more)
-        return results[: self.top_k]
-
-    def index(self, input_path: str):
-        """Index documents using the RAG pipeline."""
-        load_dotenv()
-        file_paths = get_supported_files(input_path)
-
-        documents = self.load(file_paths)
-        chunks = self.chunk(documents)
-        embedded_chunks = self.embed(chunks)
-        self.store(embedded_chunks)
-
-    def discover(self):
-        """Discover all indexed documents in the collection."""
-        # Load existing documents if we don't have them
-        if self.indexed_documents is None:
-            self._load_existing_documents_catalog()
-
-        return self.indexed_documents or []
-
-    def query(self, query_text: str):
-        """Perform a search query on the stored documents."""
-        # Always refresh retriever if not set (includes after new documents added)
-        if self.retriever is None:
-            self.retrieve()
-        return self.search(query_text)

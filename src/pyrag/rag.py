@@ -88,11 +88,10 @@ class RAG:
         return chunks
 
     def _generate_content_id(self, content: str, source: str = "") -> str:
-        """Generate a deterministic ID based on document content and source."""
-        # Combine content and source for ID generation
-        combined = f"{source}:{content}"
-        # Use SHA-256 hash to create a deterministic ID
-        return hashlib.sha256(combined.encode()).hexdigest()
+        """Generate a deterministic ID based on document content only for deduplication."""
+        # Use only content for ID generation to avoid issues with metadata loss
+        # during vectorstore reload causing duplicate detection failures
+        return hashlib.sha256(content.encode()).hexdigest()
 
     def store(self, documents):
         """Set up or load existing Milvus vectorstore with upsert for deduplication."""
@@ -108,14 +107,12 @@ class RAG:
             existing_content_hashes = set()
             for doc in self.indexed_documents:
                 content = doc.page_content
-                source = doc.metadata.get("source", "")
-                existing_content_hashes.add(self._generate_content_id(content, source))
+                existing_content_hashes.add(self._generate_content_id(content))
 
             # Add only new documents that aren't already in the catalog
             for doc in documents:
                 content = doc.page_content
-                source = doc.metadata.get("source", "")
-                doc_hash = self._generate_content_id(content, source)
+                doc_hash = self._generate_content_id(content)
                 if doc_hash not in existing_content_hashes:
                     self.indexed_documents.append(doc)
 
@@ -126,8 +123,7 @@ class RAG:
         ids = []
         for doc in documents:
             content = doc.page_content
-            source = doc.metadata.get("source", "")
-            doc_id = self._generate_content_id(content, source)
+            doc_id = self._generate_content_id(content)
             ids.append(doc_id)
 
         try:
@@ -164,12 +160,28 @@ class RAG:
             ids=ids,  # Use our generated IDs
         )
 
-    def _generate_content_id(self, content, source):
-        """Generate a hash-based ID for content deduplication."""
-        import hashlib
+    def reset(self):
+        """Reset/clear the vector storage by dropping the collection."""
+        try:
+            # Try to connect to existing vectorstore
+            temp_vectorstore = Milvus(
+                embedding_function=self.embeddings,
+                collection_name=self.collection_name,
+                connection_args={"uri": self.milvus_uri},
+            )
 
-        content_str = f"{content}|{source}"
-        return hashlib.md5(content_str.encode("utf-8")).hexdigest()
+            # Drop the collection if it exists
+            if hasattr(temp_vectorstore, "col") and temp_vectorstore.col is not None:
+                temp_vectorstore.col.drop()
+
+        except Exception:
+            # Collection doesn't exist or connection failed, which is fine
+            pass
+
+        # Reset internal state
+        self.vectorstore = None
+        self.retriever = None
+        self.indexed_documents = None
 
     def _load_existing_documents_catalog(self):
         """Load existing documents catalog from vectorstore if available."""
@@ -200,10 +212,24 @@ class RAG:
             # Use the proper Milvus collection query method to get all documents
             # This is the recommended approach instead of dummy similarity search
             try:
+                # First, get collection schema to see what fields are available
+                schema_info = self.vectorstore.col.describe()
+                available_fields = []
+                if schema_info and hasattr(schema_info, "fields"):
+                    available_fields = [field.name for field in schema_info.fields]
+                else:
+                    # Fallback: try common field names
+                    available_fields = ["text", "pk"]
+
+                # Include metadata field only if it exists in the collection
+                output_fields = ["text"]
+                if "metadata" in available_fields:
+                    output_fields.append("metadata")
+
                 # Query all documents using a simple existence check
                 results = self.vectorstore.col.query(
                     expr="pk != ''",  # Get all documents with non-empty primary keys
-                    output_fields=["text"],  # Get text field
+                    output_fields=output_fields,  # Get available fields
                     limit=16384,  # Milvus query result limit
                 )
 
@@ -225,6 +251,8 @@ class RAG:
                             metadata = json.loads(metadata)
                         except json.JSONDecodeError:
                             metadata = {}
+                    elif not isinstance(metadata, dict):
+                        metadata = {}
 
                     # Create Document object
                     from langchain_core.documents import Document
@@ -295,6 +323,14 @@ class RAG:
         chunks = self.chunk(documents)
         embedded_chunks = self.embed(chunks)
         self.store(embedded_chunks)
+
+    def discover(self):
+        """Discover all indexed documents in the collection."""
+        # Load existing documents if we don't have them
+        if self.indexed_documents is None:
+            self._load_existing_documents_catalog()
+
+        return self.indexed_documents or []
 
     def query(self, query_text: str):
         """Perform a search query on the stored documents."""

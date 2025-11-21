@@ -210,3 +210,64 @@ def test_rag_query_method(temp_milvus_uri):
     assert isinstance(results, list)
     assert len(results) <= 2  # Respects top_k
     assert all(isinstance(doc, Document) for doc in results)
+
+
+def test_rag_reset_method(temp_milvus_uri):
+    """Test RAG.reset() method to clear vector storage."""
+    rag = RAG(milvus_uri=temp_milvus_uri, collection_name="test_collection")
+
+    # Store some documents first
+    documents = [
+        Document(page_content="Test document to be reset", metadata={"source": "test.pdf"})
+    ]
+    rag.store(documents)
+
+    # Verify documents are stored
+    assert rag.vectorstore is not None
+    assert rag.indexed_documents is not None
+    assert len(rag.indexed_documents) == 1
+
+    # Reset storage
+    rag.reset()
+
+    # Verify storage is cleared
+    assert rag.vectorstore is None
+    assert rag.retriever is None
+    assert rag.indexed_documents is None
+
+    # Test resetting non-existent storage (should not raise error)
+    rag_empty = RAG(milvus_uri=temp_milvus_uri, collection_name="non_existent_collection")
+    rag_empty.reset()  # Should complete without error
+
+
+def test_rag_discover_method(temp_milvus_uri):
+    """Test RAG.discover() method to discover all indexed documents."""
+    rag = RAG(milvus_uri=temp_milvus_uri, collection_name="test_collection")
+
+    # Test when no documents are indexed
+    result = rag.discover()
+    assert result == []
+
+    # Store some documents
+    documents = [
+        Document(page_content="First test document", metadata={"source": "doc1.pdf"}),
+        Document(page_content="Second test document", metadata={"source": "doc2.pdf"}),
+        Document(page_content="Third test document", metadata={"source": "doc3.pdf"}),
+    ]
+    rag.store(documents)
+
+    # Test discovering documents
+    result = rag.discover()
+    assert isinstance(result, list)
+    assert len(result) == 3
+    assert all(isinstance(doc, Document) for doc in result)
+
+    # Verify document content is preserved
+    content_set = {doc.page_content for doc in result}
+    expected_content = {"First test document", "Second test document", "Third test document"}
+    assert content_set == expected_content
+
+    # Test discovering after resetting
+    rag.reset()
+    result = rag.discover()
+    assert result == []

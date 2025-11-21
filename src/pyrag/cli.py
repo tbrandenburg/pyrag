@@ -17,19 +17,24 @@ def main_command(
     query: str = typer.Option(
         None, "--query", "-q", help="Query to search for in indexed documents"
     ),
+    discover: bool = typer.Option(
+        False, "--discover", "-d", help="List all indexed documents in the collection"
+    ),
     top_k: int = typer.Option(5, "--top-k", "-k", help="Number of top results to return"),
-    collection_name: str = typer.Option(
-        "docling_retriever_demo", "--collection", help="Milvus collection name"
+    collection_name: str = typer.Option("rag", "--collection", help="Milvus collection name"),
+    reset: bool = typer.Option(
+        False, "--reset", help="Reset/clear the vector storage before adding new documents"
     ),
 ):
     """Main PyRAG command - index documents or search, or both."""
-    # Check if neither add_path nor query is provided
-    if not add_path and not query:
+    # Check if no action is provided
+    if not add_path and not query and not discover:
         console.print("[bold blue]Nothing to do.[/bold blue]")
         console.print("Provide either:")
-        console.print("  --add/-a <path>   to index documents")
-        console.print("  --query/-q <text> to search indexed documents")
-        console.print("  or both to index and then search")
+        console.print("  --add/-a <path>     to index documents")
+        console.print("  --query/-q <text>   to search indexed documents")
+        console.print("  --discover/-d       to list indexed documents")
+        console.print("  or combine actions as needed")
         return
 
     rag = RAG(
@@ -38,6 +43,13 @@ def main_command(
     )
 
     try:
+        # Reset vector storage if requested
+        if reset:
+            rag.reset()
+            console.print(
+                f"[bold yellow]Reset vector storage for collection:[/bold yellow] {collection_name}"
+            )
+
         # Index documents if add_path is provided
         if add_path:
             rag.index(add_path)
@@ -45,6 +57,41 @@ def main_command(
                 f"[bold green]Successfully indexed documents from:[/bold green] {add_path}"
             )
             console.print(f"[bold blue]Collection:[/bold blue] {collection_name}")
+
+        # List indexed documents if discover is requested
+        if discover:
+            documents = rag.discover()
+            if not documents:
+                console.print(
+                    f"[bold yellow]No indexed documents found in collection:[/bold yellow] "
+                    f"{collection_name}"
+                )
+            else:
+                console.print(
+                    f"[bold green]Indexed Documents in collection:[/bold green] {collection_name}"
+                )
+                console.print(f"[bold blue]Found {len(documents)} documents[/bold blue]")
+
+                # Group documents by source for better organization
+                sources = {}
+                for doc in documents:
+                    source = doc.metadata.get("source", "Unknown")
+                    if source not in sources:
+                        sources[source] = []
+                    sources[source].append(doc)
+
+                console.print("\n[bold yellow]Documents by Source:[/bold yellow]")
+                for source, docs in sources.items():
+                    console.print(f"\n[cyan]📁 {source}[/cyan] ({len(docs)} chunks)")
+                    # Show first few chunks with preview
+                    for i, doc in enumerate(docs[:3], 1):
+                        preview = doc.page_content[:150].strip().replace("\n", " ")
+                        if len(doc.page_content) > 150:
+                            preview += "..."
+                        console.print(f"   [dim]{i}. {preview}[/dim]")
+
+                    if len(docs) > 3:
+                        console.print(f"   [dim]... and {len(docs) - 3} more chunks[/dim]")
 
         # Search if query is provided
         if query:

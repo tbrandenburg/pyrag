@@ -7,7 +7,6 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 from langchain_milvus import Milvus
-from pymilvus import connections, utility
 
 
 class BaseVectorStorage(ABC):
@@ -234,22 +233,16 @@ class MilvusStorage(BaseVectorStorage):
         self.indexed_documents.pop(collection, None)
 
     def get_collections(self) -> list[str]:
-        try:
-            connections.connect(uri=self.uri)
-            return list(utility.list_collections())
-        except Exception:
-            return []
+        return list(
+            set(self.vectorstores.keys()) | set(self.indexed_documents.keys())
+        )
 
     def has_collection(self, collection: str) -> bool:
         try:
-            connections.connect(uri=self.uri)
-            return collection in utility.list_collections()
+            vectorstore = self._get_or_create_vectorstore(collection)
+            return bool(vectorstore.col.describe())
         except Exception:
-            try:
-                vectorstore = self._get_or_create_vectorstore(collection)
-                return bool(vectorstore.col.describe())
-            except Exception:
-                return False
+            return False
 
     def get_vectorstore(self, collection: str):
         return self._get_or_create_vectorstore(collection)

@@ -85,6 +85,22 @@ class BaseVectorStorage(ABC):
     # -----------------------------------------------------------
 
     @abstractmethod
+    def get_vectorstore(self, collection: str):
+        """
+        Return the underlying vectorstore instance for a collection.
+
+        Parameters
+        ----------
+        collection : str
+            Name of the collection.
+
+        Returns
+        -------
+        Any | None
+            The backing vectorstore or ``None`` if unavailable.
+        """
+
+    @abstractmethod
     def get_retriever(self, collection: str):
         """
         Return a LangChain-style retriever for querying the collection.
@@ -234,6 +250,9 @@ class MilvusStorage(BaseVectorStorage):
                 return bool(vectorstore.col.describe())
             except Exception:
                 return False
+
+    def get_vectorstore(self, collection: str):
+        return self._get_or_create_vectorstore(collection)
 
     def get_retriever(self, collection: str):
         vectorstore = self._get_or_create_vectorstore(collection)

@@ -46,6 +46,7 @@ class RAG:
         self.overlap_tokens = overlap_tokens
         self.milvus_uri = milvus_uri
         self.indexed_documents = None
+        self.vectorstore = None
 
         # Initialize embeddings
         self.embeddings = HuggingFaceEmbeddings(model_name=self.embed_model)
@@ -89,12 +90,14 @@ class RAG:
             self._load_existing_documents_catalog()
 
         self.storage.insert_documents(self.collection_name, documents)
+        self.vectorstore = self.storage.get_vectorstore(self.collection_name)
         self.indexed_documents = self.storage.get_documents(self.collection_name)
         self.retriever = None
 
     def reset(self):
         """Reset/clear the vector storage by dropping the collection."""
         self.storage.drop(self.collection_name)
+        self.vectorstore = None
         self.retriever = None
         self.indexed_documents = None
 
@@ -158,5 +161,6 @@ class RAG:
     def _load_existing_documents_catalog(self):
         """Load existing documents catalog from vectorstore if available."""
         existing_docs = self.storage.get_documents(self.collection_name)
+        self.vectorstore = self.storage.get_vectorstore(self.collection_name)
         if existing_docs:
             self.indexed_documents = existing_docs

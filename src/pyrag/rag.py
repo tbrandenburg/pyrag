@@ -152,7 +152,8 @@ class RAG:
         """Reset/clear the vector storage by dropping the collection."""
         try:
             # Drop the collection if it exists
-            if hasattr(self.vectorstore, "col") and self.vectorstore.col is not None:
+            if self.vectorstore is not None and hasattr(self.vectorstore, "col"):
+                # Collection may be None if vectorstore failed to connect
                 self.vectorstore.col.drop()
 
         except Exception:
@@ -160,7 +161,7 @@ class RAG:
             pass
 
         # Reset internal state
-        self.vectorstore = self._create_milvus_vectorstore()
+        self.vectorstore = None
         self.retriever = None
         self.indexed_documents = None
 
@@ -169,6 +170,9 @@ class RAG:
         # Load existing documents for BM25 if we don't have them yet
         if self.indexed_documents is None:
             self._load_existing_documents_catalog()
+
+        if self.vectorstore is None:
+            self.vectorstore = self._create_milvus_vectorstore()
 
         vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.top_k})
 

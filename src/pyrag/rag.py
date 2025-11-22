@@ -60,7 +60,7 @@ class RAG:
         # Initialize embeddings
         self.embeddings = HuggingFaceEmbeddings(model_name=self.embed_model)
 
-        self.vectorstore = None
+        self.vectorstore = self._create_milvus_vectorstore()
         self.retriever = None
 
     # Public methods
@@ -124,23 +124,16 @@ class RAG:
             doc_id = self._generate_content_id(content)
             ids.append(doc_id)
 
+        # Check if we can use the existing vectorstore (collection exists)
         try:
-            # Try opening existing Milvus store
-            self.vectorstore = self._create_milvus_vectorstore()
-            # Check if we can use the existing vectorstore (collection exists)
-            try:
-                # Try to get collection info to verify it exists
-                info = self.vectorstore.col.describe()
-                if info:
-                    # Collection exists, use upsert to prevent duplicates
-                    self.vectorstore.upsert(ids=ids, documents=documents)
-                    return
-            except Exception:
-                # Collection doesn't exist, fall through to create new one
-                pass
-
+            # Try to get collection info to verify it exists
+            info = self.vectorstore.col.describe()
+            if info:
+                # Collection exists, use upsert to prevent duplicates
+                self.vectorstore.upsert(ids=ids, documents=documents)
+                return
         except Exception:
-            # Connection failed, will create new vectorstore below
+            # Collection doesn't exist, fall through to create new one
             pass
 
         # Create new vectorstore if it doesn't exist or couldn't connect
@@ -158,12 +151,10 @@ class RAG:
     def reset(self):
         """Reset/clear the vector storage by dropping the collection."""
         try:
-            # Try to connect to existing vectorstore
-            temp_vectorstore = self._create_milvus_vectorstore()
-
             # Drop the collection if it exists
-            if hasattr(temp_vectorstore, "col") and temp_vectorstore.col is not None:
-                temp_vectorstore.col.drop()
+            if self.vectorstore is not None and hasattr(self.vectorstore, "col"):
+                # Collection may be None if vectorstore failed to connect
+                self.vectorstore.col.drop()
 
         except Exception:
             # Collection doesn't exist or connection failed, which is fine
@@ -176,12 +167,12 @@ class RAG:
 
     def retrieve(self):
         """Initialize retriever from existing or current vectorstore."""
-        if not self._ensure_vectorstore():
-            raise ValueError("No existing vectorstore found and none created. Run indexing first.")
-
         # Load existing documents for BM25 if we don't have them yet
         if self.indexed_documents is None:
             self._load_existing_documents_catalog()
+
+        if self.vectorstore is None:
+            self.vectorstore = self._create_milvus_vectorstore()
 
         vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.top_k})
 
@@ -239,23 +230,8 @@ class RAG:
         # during vectorstore reload causing duplicate detection failures
         return hashlib.sha256(content.encode()).hexdigest()
 
-    def _ensure_vectorstore(self) -> bool:
-        """Ensure vectorstore is initialized. Returns True if successful, False otherwise."""
-        if self.vectorstore is None:
-            try:
-                # Try to connect to existing vectorstore
-                self.vectorstore = self._create_milvus_vectorstore()
-                return True
-            except Exception:
-                # No existing vectorstore, that's fine
-                return False
-        return True
-
     def _load_existing_documents_catalog(self):
         """Load existing documents catalog from vectorstore if available."""
-        if not self._ensure_vectorstore():
-            return
-
         # Load documents from existing vectorstore
         existing_docs = self._load_documents_from_vectorstore()
         if existing_docs:

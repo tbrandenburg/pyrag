@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pyrag - Python RAG System Indexing</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind Configuration (Removed custom colors, relying on CSS variables) -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /*
+        ========================================
+        THEME PALETTES (CSS Variables)
+        ========================================
+        */
+        :root, [data-theme='light'] {
+            /* LIGHT MODE (Original GitIngest Brutalist) */
+            --c-bg: #f3f4f6;           /* Canvas Background (Light Gray) */
+            --c-surface: white;        /* Card/Block Background (White) */
+            --c-foreground: #1f2937;   /* Text (Dark Gray) */
+            --c-accent: #f97316;       /* Accent/Button (Vibrant Orange) */
+            --c-shadow: #1f2937;       /* Border/Shadow (Dark Gray/Black) */
+            --c-success: #10b981;      /* Success Status (Green) */
+            --c-pending: #fbbf24;      /* Pending Status (Yellow) */
+            --c-failed: #ef4444;       /* Failed Status (Red) */
+            --c-subtle-text: #6b7280;  /* Subtler text (Medium Gray) */
+            --shadow-size: 8px 8px;
+        }
+
+        [data-theme='dark'] {
+            /* DARK MODE (Tokyo Night Storm Inspired Brutalist) */
+            --c-bg: #1f2133;           /* Deep Navy Background */
+            --c-surface: #282a3a;      /* Darker Navy Surface */
+            --c-foreground: #c7c8d8;   /* Light Text */
+            --c-accent: #9ece6a;       /* Neon Green Accent */
+            --c-shadow: #374151;       /* NEW: Dark Blue-Gray Shadow/Border */
+            --c-success: #4acf8c;      /* Darker Success Green */
+            --c-pending: #f9e29a;      /* Muted Yellow */
+            --c-failed: #f7768e;       /* Muted Pink/Red */
+            --c-subtle-text: #a0a8b9;  /* Subtler text (Slate Blue) */
+            --shadow-size: 8px 8px;
+        }
+
+        /*
+        ========================================
+        GLOBAL & BRUTALIST STYLES (Use Vars)
+        ========================================
+        */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--c-bg);
+            color: var(--c-foreground);
+            /* Smooth transition for theme swap */
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Brutalist Block Styling - Sharp corners, thick borders, hard offset shadow */
+        .brutalist-block {
+            border-radius: 0; /* No rounded corners */
+            border: 4px solid var(--c-shadow); /* Dark Border */
+            /* MANDATORY HARD SHADOW: 8px offset shadow using var(--c-shadow) */
+            box-shadow: var(--shadow-size) 0 0 var(--c-shadow);
+            transition: transform 0.1s ease-out, box-shadow 0.1s ease-out, background-color 0.3s, border-color 0.3s;
+            background-color: var(--c-surface); /* Card Surface */
+        }
+        
+        /* Interactive element styles (buttons/cards) */
+        .brutalist-block-interactive:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: calc(var(--shadow-size) + 2px) 0 0 var(--c-shadow); /* Slightly larger shadow on hover */
+        }
+        .brutalist-block-interactive:active {
+            transform: translate(4px, 4px); /* Further pressed in */
+            box-shadow: calc(var(--shadow-size) - 4px) 0 0 var(--c-shadow); /* Smaller shadow when active */
+        }
+        
+        /* Text/Input elements - uses var(--c-foreground) for text and var(--c-surface) for background */
+        .brutalist-input {
+            padding: 1rem 1.5rem;
+        }
+        .brutalist-input input, .brutalist-input select, .brutalist-input textarea {
+            color: var(--c-foreground);
+            background-color: transparent; /* Use transparent against surface background */
+        }
+        .brutalist-input textarea::placeholder, .brutalist-input input::placeholder {
+             color: var(--c-subtle-text);
+             opacity: 0.6;
+        }
+
+        /* Utility classes for dynamic colors */
+        .text-c-foreground { color: var(--c-foreground); }
+        .text-c-accent { color: var(--c-accent); }
+        .bg-c-accent { background-color: var(--c-accent); }
+        .text-c-success { color: var(--c-success); }
+        .text-c-pending { color: var(--c-pending); }
+        .text-c-failed { color: var(--c-failed); }
+        .text-c-subtle { color: var(--c-subtle-text); }
+        .border-c-shadow { border-color: var(--c-shadow); }
+
+        /* Custom Override: Force Index Button text to black in Dark Mode */
+        .index-button-text {
+            color: var(--c-foreground); /* Default to c-foreground (Dark Gray) */
+        }
+        [data-theme='dark'] .index-button-text {
+            color: #000000 !important; /* Force black text */
+        }
+    </style>
+</head>
+<body data-theme="light" class="min-h-screen p-4 sm:p-12">
+
+    <div class="max-w-4xl mx-auto text-center">
+
+        <!-- Header: Project Name (pyrag), Stats, and Theme Toggle -->
+        <header class="mb-12 max-w-4xl mx-auto">
+            <div class="flex justify-between items-center mb-6">
+                <!-- Project Name -->
+                <div class="text-4xl sm:text-5xl font-extrabold text-left">
+                    <span class="text-c-accent">py</span><span class="text-c-foreground">rag</span>
+                    <p class="text-sm text-c-subtle mt-1">Collection: {{ collection_name }}</p>
+                </div>
+                
+                <!-- Theme Toggle Button (Brutalist Style) -->
+                <button id="theme-toggle" onclick="toggleTheme()"
+                    class="brutalist-block brutalist-block-interactive p-3 text-sm font-semibold border-4 border-c-shadow bg-c-surface text-c-foreground w-12 h-12 flex items-center justify-center"
+                    aria-label="Toggle Light/Dark Mode"
+                >
+                    <!-- Sun Icon (Initially visible) -->
+                    <svg id="sun-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.854 7.854a.75.75 0 00-1.06 1.06l1.59 1.59a.75.75 0 001.06-1.06l-1.59-1.59zm1.59 7.424a.75.75 0 010 1.06l-1.59 1.59a.75.75 0 01-1.06-1.06l1.59-1.59a.75.75 0 011.06 0zm-7.424-1.59a.75.75 0 011.06 0l1.59 1.59a.75.75 0 01-1.06 1.06l-1.59-1.59a.75.75 0 010-1.06zM12 18a6 6 0 100-12 6 6 0 000 12zM19.946 7.854a.75.75 0 011.06 0l1.59 1.59a.75.75 0 01-1.06 1.06l-1.59-1.59a.75.75 0 010-1.06zM15.354 7.854a.75.75 0 011.06 0l1.59 1.59a.75.75 0 01-1.06 1.06l-1.59-1.59a.75.75 0 010-1.06zM20.25 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5h2.25a.75.75 0 01.75.75zM3 12a.75.75 0 01-.75-.75V8.25a.75.75 0 011.5 0v3.75a.75.75 0 01-.75.75zM15.354 16.146a.75.75 0 011.06 0l1.59 1.59a.75.75 0 01-1.06 1.06l-1.59-1.59a.75.75 0 010-1.06zM3.75 12a.75.75 0 01.75.75h2.25a.75.75 0 010 1.5H4.5a.75.75 0 01-.75-.75zM12 21.75a.75.75 0 01-.75-.75v-2.25a.75.75 0 011.5 0v2.25a.75.75 0 01-.75.75z"/>
+                    </svg>
+                    
+                    <!-- Moon Icon (Initially hidden) -->
+                    <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" viewBox="0 0 24 24" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9.548 2.308A.75.75 0 0110.33 2.06c4.664-.471 8.847 1.838 10.35 5.25a.75.75 0 01-1.487.411A8.992 8.992 0 0010.51 3.51a.75.75 0 01-.962-.897zM2.308 9.548a.75.75 0 01.077-.782c3.412-1.503 5.721-5.686 5.25-10.35a.75.75 0 01.411-1.487A8.992 8.992 0 003.51 10.51a.75.75 0 01-.897-.962zM12 22.5A10.5 10.5 0 011.5 12a.75.75 0 011.5 0A9 9 0 0012 21a.75.75 0 010 1.5z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Indexing Statistics Display -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 brutalist-block text-c-foreground">
+                <div class="text-center">
+                    <p class="text-3xl font-bold text-c-accent">{{ total_documents }}</p>
+                    <p class="text-xs text-c-subtle mt-1">DOCUMENTS</p>
+                </div>
+                
+                <div class="text-center">
+                    <p class="text-3xl font-bold text-c-foreground">{{ content_types.get('code', 0) }}</p>
+                    <p class="text-xs text-c-subtle mt-1">CODE CHUNKS</p>
+                </div>
+                
+                <div class="text-center">
+                    <p class="text-3xl font-bold text-c-foreground">{{ content_types.get('text', 0) }}</p>
+                    <p class="text-xs text-c-subtle mt-1">TEXT CHUNKS</p>
+                </div>
+                
+                <div class="text-center">
+                    <p class="text-3xl font-bold text-c-accent">{{ content_types.get('table', 0) }}</p>
+                    <p class="text-xs text-c-subtle mt-1">TABLE CHUNKS</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <div class="max-w-3xl mx-auto">
+            <h1 class="text-4xl sm:text-6xl font-extrabold text-c-foreground leading-tight mb-4">
+                <span role="img" aria-label="sparkle" class="inline-block transform -rotate-12 text-c-accent">✨</span>
+                Python RAG System Indexing
+                <span role="img" aria-label="sparkle" class="inline-block transform rotate-12 text-c-success">✨</span>
+            </h1>
+
+            <p class="text-lg text-c-foreground mb-12 max-w-xl mx-auto opacity-80">
+                Index any Git repository, URL, or local path to build the vector store for pyrag.
+            </p>
+
+            <!-- Indexing Panel (Brutalist Container with Shadow) -->
+            <section class="p-6 sm:p-10 brutalist-block space-y-4">
+
+                <!-- 1. URL/Path Input (Brutalist Block) -->
+                <div class="brutalist-block brutalist-input text-left">
+                    <label for="doc-source" class="sr-only">URL or File Path</label>
+                    <textarea id="doc-source" rows="1"
+                        class="w-full bg-transparent text-xl text-c-foreground placeholder-gray-400 focus:outline-none resize-none overflow-hidden h-9"
+                        placeholder="https://github.com/or-file-path-here"
+                        oninput='this.style.height = "";this.style.height = (this.scrollHeight) + "px"'
+                    ></textarea>
+                </div>
+
+                <!-- 2. Index Button -->
+                <button onclick="indexDocuments()"
+                    class="brutalist-block brutalist-block-interactive w-full bg-c-accent index-button-text text-2xl font-semibold border-4 border-c-shadow"
+                >
+                    Index
+                </button>
+
+                <!-- 3. Exclude Filter Row -->
+                <div class="brutalist-block brutalist-input p-3 text-left">
+                    <label for="exclude-filter" class="sr-only">Exclude Paths/Patterns</label>
+                    <input type="text" id="exclude-filter"
+                        class="w-full bg-transparent text-c-foreground text-base focus:outline-none"
+                        placeholder="e.g., *.md, temp/*, /ignore-me"
+                    >
+                </div>
+
+            </section>
+        </div>
+        
+        <!-- Indexed Documents Grid (Brutalist Cards) -->
+        <section class="mt-20 max-w-4xl mx-auto">
+            <h2 class="text-2xl font-semibold text-c-foreground mb-6 text-center">
+                {% if documents %}
+                    {{ documents | length }} Indexed Document{{ 's' if documents | length != 1 else '' }}
+                {% else %}
+                    No Indexed Documents Yet
+                {% endif %}
+            </h2>
+
+            {% if documents %}
+            <div id="document-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for doc in documents %}
+                {% set doc_meta = doc.metadata or {} %}
+                {% set dl_meta = doc_meta.get('dl_meta', {}) %}
+                {% set origin = dl_meta.get('origin', {}) %}
+                {% set filename = origin.get('filename') or doc_meta.get('source', 'Document') %}
+                {% set location = doc_meta.get('source', 'Unknown source') %}
+                {% set headings = dl_meta.get('headings', []) %}
+                {% set status = doc_meta.get('status', 'Indexed') %}
+                {% set status_lower = status | lower %}
+                {% if status_lower in ['pending', 'processing'] %}
+                    {% set status_class = 'text-c-pending' %}
+                {% elif status_lower == 'failed' %}
+                    {% set status_class = 'text-c-failed' %}
+                {% else %}
+                    {% set status_class = 'text-c-success' %}
+                {% endif %}
+
+                <div class="p-5 brutalist-block brutalist-block-interactive cursor-pointer text-left">
+                    <div class="flex justify-between items-start">
+                        <h3 class="text-base font-semibold text-c-foreground truncate w-4/5" title="{{ filename }}">{{ filename }}</h3>
+                        <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-c-surface {{ status_class }} rounded-none border-2 border-c-shadow" style="box-shadow: 2px 2px 0 0 var(--c-shadow);">
+                            {{ status | capitalize }}
+                        </span>
+                    </div>
+                    <p class="text-xs text-c-subtle mt-1 mb-3" title="{{ location }}">{{ location }}</p>
+                    <div class="flex justify-between text-sm text-c-foreground opacity-70">
+                        <span>{{ "{:,}".format(doc.page_content | length) }} chars</span>
+                        <span>{{ headings | length }} heading{{ '' if headings | length == 1 else 's' }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-6 brutalist-block text-c-subtle">
+                <p class="text-lg">No documents are currently indexed in the "{{ collection_name }}" collection.</p>
+                <p class="text-sm mt-2">Use the PyRAG CLI to index some documents, then refresh this page.</p>
+            </div>
+            {% endif %}
+        </section>
+
+
+        <!-- Custom Modal for Alerts (Brutalist Style) -->
+        <div id="status-modal" class="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center hidden" onclick="hideModal()">
+            <div class="brutalist-block p-6 w-11/12 max-w-sm" onclick="event.stopPropagation()">
+                <h3 id="modal-title" class="text-lg font-bold text-c-foreground mb-3 border-b-2 border-c-shadow pb-2" style="border-color: var(--c-shadow);">Status</h3>
+                <p id="modal-message" class="text-c-foreground opacity-80 mb-4"></p>
+                <button onclick="hideModal()" class="w-full brutalist-block brutalist-block-interactive bg-c-accent index-button-text py-2 font-semibold">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Theme Toggle Logic ---
+
+        const storageKey = 'pyrag-theme';
+        const body = document.body;
+        const sunIcon = document.getElementById('sun-icon');
+        const moonIcon = document.getElementById('moon-icon');
+
+        function updateIcon(theme) {
+            if (theme === 'dark') {
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
+            } else {
+                sunIcon.classList.remove('hidden');
+                moonIcon.classList.add('hidden');
+            }
+        }
+
+        // Initialize theme from storage or default to light
+        function initializeTheme() {
+            let storedTheme = localStorage.getItem(storageKey);
+            if (!storedTheme) {
+                // Check system preference if no stored theme
+                storedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+            body.setAttribute('data-theme', storedTheme);
+            updateIcon(storedTheme);
+        }
+
+        function toggleTheme() {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem(storageKey, newTheme);
+            updateIcon(newTheme);
+        }
+
+        // --- Utility Functions ---
+
+        // Modal functions
+        function showModal(title, message) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').innerHTML = message;
+            document.getElementById('status-modal').classList.remove('hidden');
+        }
+
+        function hideModal() {
+            document.getElementById('status-modal').classList.add('hidden');
+        }
+
+        // Indexing logic
+        function indexDocuments() {
+            const sources = document.getElementById('doc-source').value.trim();
+            const exclude = document.getElementById('exclude-filter').value.trim();
+
+            if (sources === "") {
+                showModal("Input Required", "Please enter at least one file path or URL to index.");
+                return;
+            }
+
+            const sourceArray = sources.split('\n').filter(line => line.trim() !== '');
+
+            let message = `Successfully initiated indexing for ${sourceArray.length} source(s).<br><br>`;
+            message += `<strong>Filters Applied:</strong><br>`;
+            message += `- Exclude: <code>${exclude || 'None'}</code>`;
+
+            showModal("Indexing Initiated", message);
+
+            console.log("--- pyrag Indexing Request ---");
+            console.log("Sources:", sourceArray);
+            console.log("Exclude Pattern:", exclude);
+            console.log("-----------------------------");
+        }
+
+        // Auto-resize the textarea to fit content
+        window.onload = function() {
+            initializeTheme();
+            
+            const textarea = document.getElementById('doc-source');
+            function autoResize() {
+                textarea.style.height = 'auto'; // Reset height
+                textarea.style.height = (textarea.scrollHeight) + 'px'; // Set to scroll height
+            }
+            autoResize(); // Initial call
+            textarea.addEventListener('input', autoResize);
+        }
+
+    </script>
+</body>
+</html>

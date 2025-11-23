@@ -1,18 +1,13 @@
 """Main RAG pipeline implementation."""
 
-import hashlib
-from pathlib import Path
-
 from docling.chunking import HybridChunker
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 from dotenv import load_dotenv
 from langchain_classic.retrievers.ensemble import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
-from langchain_core.documents import Document
 from langchain_docling import DoclingLoader
 from langchain_docling.loader import ExportType
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
-from langchain_milvus import Milvus
 
 from .config import (
     DEFAULT_BM25_WEIGHT,
@@ -26,6 +21,7 @@ from .config import (
     DEFAULT_TOP_K,
     DEFAULT_VECTOR_WEIGHT,
 )
+from .storage import BaseVectorStorage, MilvusStorage
 from .utils import get_supported_files
 
 
@@ -50,17 +46,14 @@ class RAG:
         self.overlap_tokens = overlap_tokens
         self.milvus_uri = milvus_uri
         self.indexed_documents = None
-
-        # Ensure directory exists for local file URIs only
-        if not milvus_uri.startswith(("tcp://", "http://", "https://")):
-            milvus_path = Path(milvus_uri)
-            if milvus_path.parent != Path("."):
-                milvus_path.parent.mkdir(parents=True, exist_ok=True)
+        self.vectorstore = None
 
         # Initialize embeddings
         self.embeddings = HuggingFaceEmbeddings(model_name=self.embed_model)
 
-        self.vectorstore = self._create_milvus_vectorstore()
+        self.storage: BaseVectorStorage = MilvusStorage(
+            uri=self.milvus_uri, collection_name=self.collection_name, embeddings=self.embeddings
+        )
         self.retriever = None
 
     # Public methods
@@ -92,75 +85,18 @@ class RAG:
         return chunks
 
     def store(self, documents):
-        """Set up or load existing Milvus vectorstore with upsert for deduplication."""
-        # First, try to load existing documents if we don't have them
+        """Persist documents using the configured vector storage backend."""
         if self.indexed_documents is None:
             self._load_existing_documents_catalog()
 
-        # Add new documents to the catalog (avoid duplicates based on content hash)
-        if self.indexed_documents is None:
-            self.indexed_documents = documents
-        else:
-            # Merge new documents with existing catalog, avoiding duplicates
-            existing_content_hashes = set()
-            for doc in self.indexed_documents:
-                content = doc.page_content
-                existing_content_hashes.add(self._generate_content_id(content))
-
-            # Add only new documents that aren't already in the catalog
-            for doc in documents:
-                content = doc.page_content
-                doc_hash = self._generate_content_id(content)
-                if doc_hash not in existing_content_hashes:
-                    self.indexed_documents.append(doc)
-
-        # Reset retriever to force refresh with updated document catalog
+        self.storage.insert_documents(self.collection_name, documents)
+        self.vectorstore = self.storage.get_vectorstore(self.collection_name)
+        self.indexed_documents = self.storage.get_documents(self.collection_name)
         self.retriever = None
-
-        # Generate deterministic IDs based on content
-        ids = []
-        for doc in documents:
-            content = doc.page_content
-            doc_id = self._generate_content_id(content)
-            ids.append(doc_id)
-
-        # Check if we can use the existing vectorstore (collection exists)
-        try:
-            # Try to get collection info to verify it exists
-            info = self.vectorstore.col.describe()
-            if info:
-                # Collection exists, use upsert to prevent duplicates
-                self.vectorstore.upsert(ids=ids, documents=documents)
-                return
-        except Exception:
-            # Collection doesn't exist, fall through to create new one
-            pass
-
-        # Create new vectorstore if it doesn't exist or couldn't connect
-        self.vectorstore = Milvus.from_documents(
-            documents=documents,
-            embedding=self.embeddings,
-            collection_name=self.collection_name,
-            connection_args={"uri": self.milvus_uri},
-            index_params={"index_type": "FLAT"},
-            drop_old=False,
-            ids=ids,  # Use our generated IDs
-            enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
-        )
 
     def reset(self):
         """Reset/clear the vector storage by dropping the collection."""
-        try:
-            # Drop the collection if it exists
-            if self.vectorstore is not None and hasattr(self.vectorstore, "col"):
-                # Collection may be None if vectorstore failed to connect
-                self.vectorstore.col.drop()
-
-        except Exception:
-            # Collection doesn't exist or connection failed, which is fine
-            pass
-
-        # Reset internal state
+        self.storage.drop(self.collection_name)
         self.vectorstore = None
         self.retriever = None
         self.indexed_documents = None
@@ -171,10 +107,8 @@ class RAG:
         if self.indexed_documents is None:
             self._load_existing_documents_catalog()
 
-        if self.vectorstore is None:
-            self.vectorstore = self._create_milvus_vectorstore()
-
-        vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.top_k})
+        vector_retriever = self.storage.get_retriever(self.collection_name)
+        vector_retriever.search_kwargs = {"k": self.top_k}
 
         # Use ensemble retriever with BM25 when documents are available
         if self.indexed_documents:
@@ -224,73 +158,9 @@ class RAG:
         return self.search(query_text)
 
     # Private methods
-    def _generate_content_id(self, content: str, source: str = "") -> str:
-        """Generate a deterministic ID based on document content only for deduplication."""
-        # Use only content for ID generation to avoid issues with metadata loss
-        # during vectorstore reload causing duplicate detection failures
-        return hashlib.sha256(content.encode()).hexdigest()
-
     def _load_existing_documents_catalog(self):
         """Load existing documents catalog from vectorstore if available."""
-        # Load documents from existing vectorstore
-        existing_docs = self._load_documents_from_vectorstore()
+        existing_docs = self.storage.get_documents(self.collection_name)
+        self.vectorstore = self.storage.get_vectorstore(self.collection_name)
         if existing_docs:
             self.indexed_documents = existing_docs
-
-    def _load_documents_from_vectorstore(self):
-        """Load all documents from existing vectorstore using proper Milvus query method."""
-        try:
-            # Access the underlying collection directly for querying
-            if not hasattr(self.vectorstore, "col") or self.vectorstore.col is None:
-                return None
-
-            # Use the proper Milvus collection query method to get all documents
-            # This is the recommended approach instead of dummy similarity search
-            try:
-                # With enable_dynamic_field=True, metadata is stored dynamically
-                # We need to query for all fields using "*" to get dynamic metadata
-                output_fields = ["*"]
-
-                # Query all documents using a simple existence check
-                results = self.vectorstore.col.query(
-                    expr="pk != ''",  # Get all documents with non-empty primary keys
-                    output_fields=output_fields,  # Get all fields including dynamic metadata
-                )
-
-                if not results:
-                    return None
-
-                # Convert Milvus query results back to LangChain Document objects
-                documents = []
-                for result in results:
-                    # Extract text content
-                    text_content = result.get("text", "")
-
-                    # Build metadata from all fields except text, vector, and pk
-                    metadata = {}
-                    for key, value in result.items():
-                        if key not in ["text", "vector", "pk"]:
-                            metadata[key] = value
-
-                    # Create Document object
-                    doc = Document(page_content=text_content, metadata=metadata)
-                    documents.append(doc)
-
-                return documents
-
-            except Exception:
-                # If direct query fails, fallback gracefully
-                return None
-
-        except Exception:
-            # If loading fails, return None - will fallback to vector-only retrieval
-            return None
-
-    def _create_milvus_vectorstore(self) -> Milvus:
-        """Create a Milvus vectorstore instance with consistent configuration."""
-        return Milvus(
-            embedding_function=self.embeddings,
-            collection_name=self.collection_name,
-            connection_args={"uri": self.milvus_uri},
-            enable_dynamic_field=True,  # Enable dynamic field for JSON metadata storage
-        )

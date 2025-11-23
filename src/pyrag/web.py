@@ -89,7 +89,7 @@ def index(
     try:
         data = discover_documents(collection_name)
         return templates.TemplateResponse(
-            "index.html",
+            "index_new.html",
             {
                 "request": request,
                 "collection_name": data.collection_name,

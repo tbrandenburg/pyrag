@@ -1,13 +1,20 @@
 """Web interface for PyRAG using FastAPI."""
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+import os
 
 from .rag import RAG
 
 # Default collection name (avoiding config.py import due to langchain_docling dependency)
 DEFAULT_COLLECTION_NAME = "rag"
+
+# Setup templates
+templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+templates = Jinja2Templates(directory=templates_dir)
 
 app = FastAPI(title="PyRAG API", description="Document indexing and search API")
 
@@ -71,12 +78,30 @@ def _analyze_documents(documents: List) -> Dict[str, Any]:
     }
 
 
-@app.get("/", response_model=DiscoveryResponse)
+@app.get("/", response_class=HTMLResponse)
 def index(
+    request: Request,
     collection_name: str = Query(DEFAULT_COLLECTION_NAME, description="Milvus collection name")
 ):
     """Root endpoint showing discovery of all indexed documents."""
-    return discover_documents(collection_name=collection_name)
+    try:
+        data = discover_documents(collection_name)
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "collection_name": data.collection_name,
+                "total_documents": data.total_documents,
+                "content_types": data.content_types,
+                "sources": data.sources,
+                "filenames": data.filenames,
+                "total_content_length": data.total_content_length,
+                "documents": data.documents,
+            }
+        )
+    except Exception as e:
+        # Fallback to error template or simple HTML
+        return f"<html><body><h1>Error</h1><p>{str(e)}</p></body></html>"
 
 
 def discover_documents(collection_name: str) -> DiscoveryResponse:

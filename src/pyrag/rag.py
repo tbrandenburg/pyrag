@@ -52,7 +52,7 @@ class RAG:
         self.embeddings = HuggingFaceEmbeddings(model_name=self.embed_model)
 
         self.storage: BaseVectorStorage = MilvusStorage(
-            uri=self.milvus_uri, embeddings=self.embeddings
+            uri=self.milvus_uri, collection_name=self.collection_name, embeddings=self.embeddings
         )
         self.retriever = None
 

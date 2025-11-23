@@ -27,7 +27,7 @@ class BaseVectorStorage(ABC):
     # -----------------------------------------------------------
 
     @abstractmethod
-    def __init__(self, uri: str):
+    def __init__(self, uri: str, collection_name: str, embeddings=None):
         """
         Initialize the storage backend.
 
@@ -35,6 +35,10 @@ class BaseVectorStorage(ABC):
         ----------
         uri : str
             Connection URI or address/path to the underlying vector storage system.
+        collection_name : str
+            Name of the collection to work with.
+        embeddings : Any, optional
+            Embedding function to use for vectorization.
         """
 
     # -----------------------------------------------------------
@@ -208,66 +212,51 @@ class BaseVectorStorage(ABC):
 class MilvusStorage(BaseVectorStorage):
     """Milvus-backed implementation of ``BaseVectorStorage``."""
 
-    def __init__(self, uri: str, embeddings=None):
+    def __init__(self, uri: str, collection_name: str, embeddings=None):
         self.uri = uri
         self.embeddings = embeddings
-        self.vectorstores: dict[str, Milvus] = {}
-        self.indexed_documents: dict[str, list[Document]] = {}
+        self.collection_name = collection_name
 
         if not uri.startswith(("tcp://", "http://", "https://")):
             milvus_path = Path(uri)
             if milvus_path.parent != Path("."):
                 milvus_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Initialize vectorstore immediately
+        self.vectorstore = Milvus(
+            embedding_function=self.embeddings,
+            collection_name=self.collection_name,
+            connection_args={"uri": self.uri},
+            enable_dynamic_field=True,
+        )
+
     def drop(self, collection: str):
-        vectorstore = self.vectorstores.pop(collection, None)
-        try:
-            if (
-                vectorstore is not None
-                and hasattr(vectorstore, "col")
-                and vectorstore.col is not None
-            ):
-                vectorstore.col.drop()
-        except Exception:
-            pass
-        self.indexed_documents.pop(collection, None)
+        if self.vectorstore and self.vectorstore.col and self.vectorstore.col.name == collection:
+            self.vectorstore.col.drop()
 
     def get_collections(self) -> list[str]:
-        return list(
-            set(self.vectorstores.keys()) | set(self.indexed_documents.keys())
-        )
+        # Collections listing is not supported without direct pymilvus access
+        # Return empty list for now as this is an unsupported feature
+        return []
 
     def has_collection(self, collection: str) -> bool:
         try:
-            vectorstore = self._get_or_create_vectorstore(collection)
-            return bool(vectorstore.col.describe())
+            return bool(self.vectorstore.col.describe())
         except Exception:
             return False
 
     def get_vectorstore(self, collection: str):
-        return self._get_or_create_vectorstore(collection)
+        return self.vectorstore
 
     def get_retriever(self, collection: str):
-        vectorstore = self._get_or_create_vectorstore(collection)
-        return vectorstore.as_retriever()
+        return self.vectorstore.as_retriever()
 
     def get_documents(self, collection: str):
-        if collection in self.indexed_documents:
-            return self.indexed_documents[collection]
-
-        vectorstore = self.vectorstores.get(collection) or self._get_or_create_vectorstore(
-            collection
-        )
-        documents = self._load_documents_from_vectorstore(vectorstore)
-        self.indexed_documents[collection] = documents or []
-        return self.indexed_documents[collection]
+        return self._load_documents_from_vectorstore(self.vectorstore)
 
     def get_document_by_id(self, collection: str, doc_id: str):
-        vectorstore = self.vectorstores.get(collection) or self._get_or_create_vectorstore(
-            collection
-        )
         try:
-            results = vectorstore.col.query(expr=f"pk == '{doc_id}'", output_fields=["*"])
+            results = self.vectorstore.col.query(expr=f"pk == '{doc_id}'", output_fields=["*"])
         except Exception:
             return None
 
@@ -295,15 +284,14 @@ class MilvusStorage(BaseVectorStorage):
         if not new_docs:
             return
 
-        vectorstore = self.vectorstores.get(collection)
         try:
-            if vectorstore is not None and vectorstore.col.describe():
-                vectorstore.upsert(ids=ids, documents=new_docs)
-                self.indexed_documents[collection] = existing_docs + new_docs
+            if self.vectorstore.col.describe():
+                self.vectorstore.upsert(ids=ids, documents=new_docs)
                 return
         except Exception:
             pass
 
+        # Create new vectorstore if upsert failed
         vectorstore = Milvus.from_documents(
             documents=new_docs,
             embedding=self.embeddings,
@@ -314,39 +302,15 @@ class MilvusStorage(BaseVectorStorage):
             ids=ids,
             enable_dynamic_field=True,
         )
-        self.vectorstores[collection] = vectorstore
-        self.indexed_documents[collection] = existing_docs + new_docs
+        self.vectorstore = vectorstore
 
     def delete_document_by_id(self, collection: str, doc_id: str):
-        vectorstore = self.vectorstores.get(collection) or self._get_or_create_vectorstore(
-            collection
-        )
         with contextlib.suppress(Exception):
-            vectorstore.col.delete(expr=f"pk in ['{doc_id}']")
-
-        documents = self.indexed_documents.get(collection, [])
-        self.indexed_documents[collection] = [
-            doc for doc in documents if self._generate_content_id(doc.page_content) != doc_id
-        ]
+            self.vectorstore.col.delete(expr=f"pk in ['{doc_id}']")
 
     def reset(self):
-        for collection in list(self.get_collections()):
-            self.drop(collection)
-        self.vectorstores.clear()
-        self.indexed_documents.clear()
-
-    def _get_or_create_vectorstore(self, collection: str):
-        if collection in self.vectorstores:
-            return self.vectorstores[collection]
-
-        vectorstore = Milvus(
-            embedding_function=self.embeddings,
-            collection_name=collection,
-            connection_args={"uri": self.uri},
-            enable_dynamic_field=True,
-        )
-        self.vectorstores[collection] = vectorstore
-        return vectorstore
+        if self.vectorstore:
+            self.vectorstore.col.drop()
 
     def _load_documents_from_vectorstore(self, vectorstore: Milvus | None):
         if vectorstore is None or not hasattr(vectorstore, "col") or vectorstore.col is None:

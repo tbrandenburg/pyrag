@@ -357,9 +357,10 @@
             return 'text-c-pending';
         }
 
-        function updateCardStatus(card, statusText) {
+        function updateCardStatus(card, statusText, message = null) {
             const statusLabel = card.querySelector('[data-role="status-label"]');
             const helperText = card.querySelector('[data-role="status-helper"]');
+            const errorText = card.querySelector('[data-role="error-text"]');
             const statusClass = getStatusClass(statusText);
             statusLabel.className = `inline-flex items-center px-2 py-0.5 text-xs font-medium bg-c-surface rounded-none border-2 border-c-shadow ${statusClass}`;
             statusLabel.textContent = statusText;
@@ -371,6 +372,16 @@
                     helperText.textContent = 'Index failed';
                 } else {
                     helperText.textContent = 'Indexing...';
+                }
+            }
+
+            if (errorText) {
+                if (message && statusText.toLowerCase() === 'failed') {
+                    errorText.textContent = message;
+                    errorText.classList.remove('hidden');
+                } else {
+                    errorText.textContent = '';
+                    errorText.classList.add('hidden');
                 }
             }
         }
@@ -392,6 +403,7 @@
                     <span class="text-c-subtle text-xs">Awaiting completion</span>
                 </div>
                 <p class="text-sm text-c-foreground opacity-80 mt-3">Index request for <code>${source}</code></p>
+                <p data-role="error-text" class="text-xs text-c-failed mt-2 hidden"></p>
             `;
 
             grid.prepend(card);
@@ -414,14 +426,24 @@
                 });
 
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(errorText || 'Indexing failed');
+                    let errorMessage = 'Indexing failed';
+                    try {
+                        const errorJson = await response.json();
+                        if (errorJson?.detail) {
+                            errorMessage = errorJson.detail;
+                        }
+                    } catch (_) {
+                        const errorText = await response.text();
+                        if (errorText) errorMessage = errorText;
+                    }
+
+                    throw new Error(errorMessage);
                 }
 
                 updateCardStatus(card, 'Finished');
             } catch (error) {
                 console.error('Indexing failed', error);
-                updateCardStatus(card, 'Failed');
+                updateCardStatus(card, 'Failed', error.message);
                 showModal('Indexing Failed', `Failed to index <code>${source}</code>.<br>${error.message}`);
             }
         }

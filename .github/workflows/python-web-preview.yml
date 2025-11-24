@@ -52,6 +52,9 @@ jobs:
           sudo apt-get install -y ngrok
           echo "✅ Installed $(ngrok version)"
 
+      - name: Discover PyRAG content
+        run: uv run pyrag --add https://arxiv.org/pdf/2511.17461 --discover
+
       - name: Start PyRAG web server
         run: |
           echo "🚀 Starting PyRAG FastAPI server on port 8000..."

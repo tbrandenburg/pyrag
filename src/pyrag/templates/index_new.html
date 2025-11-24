@@ -217,7 +217,7 @@
         
 
         <!-- Indexed Sources Grid (Brutalist Cards) -->
-        <section class="mt-20 max-w-4xl mx-auto">
+        <section id="document-section" class="mt-20 max-w-4xl mx-auto">
             <h2 class="text-2xl font-semibold text-c-foreground mb-6 text-center">
                 {% if source_groups %}
                     {{ source_groups | length }} Indexed Source{{ 's' if source_groups | length != 1 else '' }}
@@ -226,7 +226,6 @@
                 {% endif %}
             </h2>
 
-            {% if source_groups %}
             <div id="document-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {% for source in source_groups %}
                 {% set filename = source.filenames[0] if source.filenames else source.source %}
@@ -243,7 +242,7 @@
                 <div class="p-5 brutalist-block brutalist-block-interactive cursor-pointer text-left">
                     <div class="flex justify-between items-start">
                         <h3 class="text-base font-semibold text-c-foreground truncate w-4/5" title="{{ filename }}">{{ filename}}</h3>
-                        <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-c-surface {{ status_class }} rounded-none border-2 border-c-shadow" style="box-shadow: 2px 2px 0 0 var(--c-shadow);">
+                        <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-c-surface {{ status_class}} rounded-none border-2 border-c-shadow" style="box-shadow: 2px 2px 0 0 var(--c-shadow);">
                             {{ status | capitalize }}
                         </span>
                     </div>
@@ -259,8 +258,9 @@
                 </div>
                 {% endfor %}
             </div>
-            {% else %}
-            <div class="p-6 brutalist-block text-c-subtle">
+
+            {% if not source_groups %}
+            <div id="empty-state" class="p-6 brutalist-block text-c-subtle">
                 <p class="text-lg">No sources are currently indexed in the "{{ collection_name }}" collection.</p>
                 <p class="text-sm mt-2">Use the PyRAG CLI to index content, then refresh this page.</p>
             </div>
@@ -285,6 +285,7 @@
         const body = document.body;
         const sunIcon = document.getElementById('sun-icon');
         const moonIcon = document.getElementById('moon-icon');
+        const collectionName = "{{ collection_name }}";
 
         function updateIcon(theme) {
             if (theme === 'dark') {
@@ -329,27 +330,116 @@
         }
 
         // Indexing logic
-        function indexDocuments() {
+        function ensureDocumentGrid() {
+            const grid = document.getElementById('document-grid');
+            if (grid) {
+                const emptyState = document.getElementById('empty-state');
+                if (emptyState) emptyState.remove();
+                return grid;
+            }
+
+            const section = document.getElementById('document-section');
+            const newGrid = document.createElement('div');
+            newGrid.id = 'document-grid';
+            newGrid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6';
+            section.appendChild(newGrid);
+
+            const emptyState = document.getElementById('empty-state');
+            if (emptyState) emptyState.remove();
+
+            return newGrid;
+        }
+
+        function getStatusClass(statusText) {
+            const status = statusText.toLowerCase();
+            if (status === 'failed') return 'text-c-failed';
+            if (status === 'finished') return 'text-c-success';
+            return 'text-c-pending';
+        }
+
+        function updateCardStatus(card, statusText) {
+            const statusLabel = card.querySelector('[data-role="status-label"]');
+            const helperText = card.querySelector('[data-role="status-helper"]');
+            const statusClass = getStatusClass(statusText);
+            statusLabel.className = `inline-flex items-center px-2 py-0.5 text-xs font-medium bg-c-surface rounded-none border-2 border-c-shadow ${statusClass}`;
+            statusLabel.textContent = statusText;
+
+            if (helperText) {
+                if (statusText.toLowerCase() === 'finished') {
+                    helperText.textContent = 'Index complete';
+                } else if (statusText.toLowerCase() === 'failed') {
+                    helperText.textContent = 'Index failed';
+                } else {
+                    helperText.textContent = 'Indexing...';
+                }
+            }
+        }
+
+        function addDocumentCard(source, statusText = 'In Progress') {
+            const grid = ensureDocumentGrid();
+            const card = document.createElement('div');
+            card.className = 'p-5 brutalist-block brutalist-block-interactive cursor-pointer text-left';
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <h3 class="text-base font-semibold text-c-foreground truncate w-4/5" title="${source}">${source}</h3>
+                    <span data-role="status-label" class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-c-surface rounded-none border-2 border-c-shadow" style="box-shadow: 2px 2px 0 0 var(--c-shadow);">
+                        ${statusText}
+                    </span>
+                </div>
+                <p class="text-xs text-c-subtle mt-1 mb-3" title="${source}">${source}</p>
+                <div class="flex justify-between text-sm text-c-foreground opacity-70">
+                    <span data-role="status-helper">Indexing...</span>
+                    <span class="text-c-subtle text-xs">Awaiting completion</span>
+                </div>
+                <p class="text-sm text-c-foreground opacity-80 mt-3">Index request for <code>${source}</code></p>
+            `;
+
+            grid.prepend(card);
+            updateCardStatus(card, statusText);
+            return card;
+        }
+
+        async function indexSource(source, card) {
+            updateCardStatus(card, 'In Progress');
+            try {
+                const response = await fetch('/index', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        path: source,
+                        collection_name: collectionName,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Indexing failed');
+                }
+
+                updateCardStatus(card, 'Finished');
+            } catch (error) {
+                console.error('Indexing failed', error);
+                updateCardStatus(card, 'Failed');
+                showModal('Indexing Failed', `Failed to index <code>${source}</code>.<br>${error.message}`);
+            }
+        }
+
+        async function indexDocuments() {
             const sources = document.getElementById('doc-source').value.trim();
-            const exclude = document.getElementById('exclude-filter').value.trim();
 
             if (sources === "") {
                 showModal("Input Required", "Please enter at least one file path or URL to index.");
                 return;
             }
 
-            const sourceArray = sources.split('\n').filter(line => line.trim() !== '');
+            const sourceArray = sources.split('\n').map(line => line.trim()).filter(line => line !== '');
 
-            let message = `Successfully initiated indexing for ${sourceArray.length} source(s).<br><br>`;
-            message += `<strong>Filters Applied:</strong><br>`;
-            message += `- Exclude: <code>${exclude || 'None'}</code>`;
-
-            showModal("Indexing Initiated", message);
-
-            console.log("--- pyrag Indexing Request ---");
-            console.log("Sources:", sourceArray);
-            console.log("Exclude Pattern:", exclude);
-            console.log("-----------------------------");
+            for (const source of sourceArray) {
+                const card = addDocumentCard(source, 'In Progress');
+                await indexSource(source, card);
+            }
         }
 
         // Auto-resize the textarea to fit content

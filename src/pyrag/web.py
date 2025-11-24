@@ -35,6 +35,11 @@ class SourceGroupResponse(BaseModel):
     preview: str
 
 
+class IndexRequest(BaseModel):
+    path: str
+    collection_name: str = DEFAULT_COLLECTION_NAME
+
+
 class DiscoveryResponse(BaseModel):
     collection_name: str
     total_sources: int
@@ -153,6 +158,17 @@ def index(
     except Exception as e:
         # Fallback to error template or simple HTML
         return f"<html><body><h1>Error</h1><p>{str(e)}</p></body></html>"
+
+
+@app.post("/index")
+def index_document(request: IndexRequest):
+    """Index a document path or URL and return completion status."""
+    try:
+        rag = RAG(collection_name=request.collection_name)
+        rag.index(request.path)
+        return {"status": "finished"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 def discover_documents(collection_name: str) -> DiscoveryResponse:

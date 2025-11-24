@@ -1,0 +1,180 @@
+name: PyRAG Web Preview
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      timeout_minutes:
+        description: 'Preview timeout in minutes'
+        required: false
+        default: '10'
+        type: string
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25  # buffer above the 10-minute tunnel lifetime
+
+    env:
+      PREVIEW_TIMEOUT_MINUTES: ${{ github.event.inputs.timeout_minutes || '10' }}
+      NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: |
+            pyproject.toml
+            uv.lock
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Install Python dependencies
+        run: uv pip install --system .
+
+      - name: Install latest ngrok CLI (v4)
+        run: |
+          echo "🔧 Installing official ngrok CLI (v4)..."
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | \
+            sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | \
+            sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt-get update -y
+          sudo apt-get install -y ngrok
+          echo "✅ Installed $(ngrok version)"
+
+      - name: Start PyRAG web server
+        run: |
+          echo "🚀 Starting PyRAG FastAPI server on port 8000..."
+          nohup uvicorn pyrag.web:app --host 0.0.0.0 --port 8000 > web.log 2>&1 &
+
+          echo "⏳ Waiting for web server to become available..."
+          for i in {1..60}; do
+            if nc -z localhost 8000 2>/dev/null; then
+              echo "✅ Web server is ready on port 8000."
+              break
+            fi
+            sleep 5
+          done
+
+          if ! nc -z localhost 8000 2>/dev/null; then
+            echo "❌ Web server failed to start."
+            tail -n 20 web.log || true
+            exit 1
+          fi
+
+          echo "🔍 Last few lines of web.log:"
+          tail -n 15 web.log || true
+
+      - name: Start ngrok tunnel (v4 CLI, verbose)
+        id: ngrok
+        env:
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+        run: |
+          echo "🌐 Establishing ngrok tunnel (v4, verbose mode enabled)..."
+          echo "🔑 Using NGROK_AUTHTOKEN from environment (not stored on disk)."
+
+          echo "🚀 Starting ngrok for port 8000 (v4 CLI)..."
+          nohup ngrok http 8000 --log=stdout > ngrok.log 2>&1 &
+          NGROK_PID=$!
+          echo "🧩 ngrok process started with PID $NGROK_PID"
+          sleep 3
+
+          echo "⏳ Waiting for ngrok API (http://127.0.0.1:4040) to become available..."
+          for i in {1..30}; do
+            url=$(curl -s --max-time 2 http://127.0.0.1:4040/api/tunnels | grep -o 'https://[^\"]*' | head -n 1 || true)
+            if [ -n "$url" ]; then
+              echo "✅ ngrok tunnel established successfully: $url"
+              echo "preview_url=$url" >> $GITHUB_OUTPUT
+              break
+            fi
+
+            echo "   ...still waiting ($i/30)"
+            if (( i % 5 == 0 )); then
+              echo "🔍 Partial ngrok log:"
+              tail -n 10 ngrok.log || true
+            fi
+            sleep 2
+          done
+
+          if [ -z "$url" ]; then
+            echo "❌ ngrok tunnel failed to start within timeout."
+            echo "🧾 Full ngrok log output for debugging:"
+            cat ngrok.log || true
+            echo "🧨 Killing ngrok process PID $NGROK_PID"
+            kill $NGROK_PID || true
+            exit 1
+          fi
+
+          echo "🎉 ngrok setup complete and verified."
+
+      - name: Send Telegram message
+        if: ${{ success() }}
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          REPO=${{ github.repository }}
+          PREVIEW_URL="${{ steps.ngrok.outputs.preview_url }}"
+          TIMEOUT_MINUTES=${{ env.PREVIEW_TIMEOUT_MINUTES }}
+          WORKFLOW_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER=${{ github.event.pull_request.number }}
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+
+            ESCAPED_TITLE=$(echo "$PR_TITLE" | sed 's/[-_*\[\]()~`>#+=|{}.!]/\\&/g')
+            ESCAPED_AUTHOR=$(echo "$AUTHOR" | sed 's/[-_*\[\]()~`>#+=|{}.!]/\\&/g')
+            ESCAPED_REPO=$(echo "$REPO" | sed 's/[-_*\[\]()~`>#+=|{}.!]/\\&/g')
+
+            MSG=$(printf '%s\n' \
+              "🚀 *Preview ready for PR \\#$PR_NUMBER in $ESCAPED_REPO*" \
+              "" \
+              "*Title:* $ESCAPED_TITLE" \
+              "*Author:* $ESCAPED_AUTHOR" \
+              "" \
+              "*Live Preview:* [Open Preview]($PREVIEW_URL)" \
+              "*Workflow:* [View Run]($WORKFLOW_URL)" \
+              "⏳ *This preview will expire in ${TIMEOUT_MINUTES} minutes\\.*" \
+              "" \
+              "[View on GitHub](https://github.com/$REPO/pull/$PR_NUMBER)"
+            )
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+            ACTOR="${{ github.actor }}"
+
+            ESCAPED_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[-_*\[\]()~`>#+=|{}.!]/\\&/g')
+            ESCAPED_ACTOR=$(echo "$ACTOR" | sed 's/[-_*\[\]()~`>#+=|{}.!]/\\&/g')
+            ESCAPED_REPO=$(echo "$REPO" | sed 's/[-_*\[\]()~`>#+=|{}.!]/\\&/g')
+
+            MSG=$(printf '%s\n' \
+              "🚀 *Manual preview deployed for $ESCAPED_REPO*" \
+              "" \
+              "*Branch:* $ESCAPED_BRANCH" \
+              "*Triggered by:* $ESCAPED_ACTOR" \
+              "" \
+              "*Live Preview:* [Open Preview]($PREVIEW_URL)" \
+              "*Workflow:* [View Run]($WORKFLOW_URL)" \
+              "⏳ *This preview will expire in ${TIMEOUT_MINUTES} minutes\\.*"
+            )
+          fi
+
+          curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+            -d "chat_id=$CHAT_ID" \
+            -d "parse_mode=MarkdownV2" \
+            --data-urlencode "text=$MSG"
+
+      - name: Keep ngrok alive
+        run: |
+          echo "⏳ Keeping ngrok tunnel alive for $PREVIEW_TIMEOUT_MINUTES minutes..."
+          sleep $(( PREVIEW_TIMEOUT_MINUTES * 60 ))

@@ -25,18 +25,29 @@ class DocumentResponse(BaseModel):
     metadata: dict[str, Any]
 
 
+class SourceGroupResponse(BaseModel):
+    source: str
+    filenames: list[str]
+    heading_count: int
+    chunk_count: int
+    total_chars: int
+    status: str
+    preview: str
+
+
 class DiscoveryResponse(BaseModel):
     collection_name: str
-    total_documents: int
+    total_sources: int
+    total_chunks: int
     content_types: dict[str, int]
     sources: list[str]
     filenames: list[str]
     total_content_length: int
-    documents: list[DocumentResponse]
+    source_groups: list[SourceGroupResponse]
 
 
 def _analyze_documents(documents: list) -> dict[str, Any]:
-    """Analyze documents for insights similar to CLI discover command."""
+    """Analyze documents and group them by source for UI display."""
 
     def get_content_type(doc):
         dl_meta = doc.metadata.get("dl_meta", {})
@@ -45,38 +56,75 @@ def _analyze_documents(documents: list) -> dict[str, Any]:
             return doc_items[0].get("label", "unknown")
         return "unknown"
 
-    def get_filename(doc):
-        dl_meta = doc.metadata.get("dl_meta", {})
-        origin = dl_meta.get("origin", {})
-        return origin.get("filename")
-
     content_types = {}
-    sources = set()
-    filenames = set()
+    filenames: set[str] = set()
     total_content_length = 0
+    grouped_sources: dict[str, dict[str, Any]] = {}
+    status_priority = {"failed": 3, "processing": 2, "pending": 2, "indexed": 1}
 
     for doc in documents:
-        # Content type analysis
+        metadata = doc.metadata or {}
+        dl_meta = metadata.get("dl_meta", {})
+        origin = dl_meta.get("origin", {})
+        source = metadata.get("source", "Unknown source")
+        filename = origin.get("filename")
+        headings = dl_meta.get("headings", [])
+        status_lower = (metadata.get("status") or "indexed").lower()
+
         content_type = get_content_type(doc)
         content_types[content_type] = content_types.get(content_type, 0) + 1
 
-        # Source analysis
-        source = doc.metadata.get("source", "Unknown")
-        sources.add(source)
-
-        # Filename tracking
-        filename = get_filename(doc)
         if filename:
             filenames.add(filename)
 
-        # Content length tracking
         total_content_length += len(doc.page_content)
+
+        group = grouped_sources.setdefault(
+            source,
+            {
+                "filenames": set(),
+                "headings": set(),
+                "chunk_count": 0,
+                "total_chars": 0,
+                "status": "Indexed",
+                "preview": doc.page_content,
+            },
+        )
+
+        if filename:
+            group["filenames"].add(filename)
+        for heading in headings:
+            group["headings"].add(heading)
+
+        group["chunk_count"] += 1
+        group["total_chars"] += len(doc.page_content)
+
+        current_rank = status_priority.get(group["status"].lower(), 0)
+        incoming_rank = status_priority.get(status_lower, 0)
+        if incoming_rank >= current_rank:
+            group["status"] = status_lower.title()
+
+    source_groups = [
+        SourceGroupResponse(
+            source=source,
+            filenames=sorted(data["filenames"]),
+            heading_count=len(data["headings"]),
+            chunk_count=data["chunk_count"],
+            total_chars=data["total_chars"],
+            status=data["status"],
+            preview=data["preview"],
+        )
+        for source, data in sorted(grouped_sources.items())
+    ]
 
     return {
         "content_types": content_types,
-        "sources": list(sources),
-        "filenames": list(filenames),
+        "sources": [group.source for group in source_groups],
+        "filenames": sorted(filenames),
         "total_content_length": total_content_length,
+        "source_groups": source_groups,
+        "total_sources": len(source_groups),
+        "total_chunks": len(documents),
     }
 
 
@@ -93,12 +141,13 @@ def index(
             {
                 "request": request,
                 "collection_name": data.collection_name,
-                "total_documents": data.total_documents,
+                "total_sources": data.total_sources,
+                "total_chunks": data.total_chunks,
                 "content_types": data.content_types,
                 "sources": data.sources,
                 "filenames": data.filenames,
                 "total_content_length": data.total_content_length,
-                "documents": data.documents,
+                "source_groups": data.source_groups,
             },
         )
     except Exception as e:
@@ -115,27 +164,26 @@ def discover_documents(collection_name: str) -> DiscoveryResponse:
         if not documents:
             return DiscoveryResponse(
                 collection_name=collection_name,
-                total_documents=0,
+                total_sources=0,
+                total_chunks=0,
                 content_types={},
                 sources=[],
                 filenames=[],
                 total_content_length=0,
-                documents=[],
+                source_groups=[],
             )
 
         analysis = _analyze_documents(documents)
 
         return DiscoveryResponse(
             collection_name=collection_name,
-            total_documents=len(documents),
+            total_sources=analysis["total_sources"],
+            total_chunks=analysis["total_chunks"],
             content_types=analysis["content_types"],
             sources=analysis["sources"],
             filenames=analysis["filenames"],
             total_content_length=analysis["total_content_length"],
-            documents=[
-                DocumentResponse(page_content=doc.page_content, metadata=doc.metadata)
-                for doc in documents
-            ],
+            source_groups=analysis["source_groups"],
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

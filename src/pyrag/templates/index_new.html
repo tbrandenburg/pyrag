@@ -150,15 +150,15 @@
             <!-- Indexing Statistics Display -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 brutalist-block text-c-foreground">
                 <div class="text-center">
-                    <p class="text-3xl font-bold text-c-accent">{{ total_documents }}</p>
-                    <p class="text-xs text-c-subtle mt-1">DOCUMENTS</p>
+                    <p class="text-3xl font-bold text-c-accent">{{ total_sources }}</p>
+                    <p class="text-xs text-c-subtle mt-1">SOURCES</p>
                 </div>
-                
+
                 <div class="text-center">
-                    <p class="text-3xl font-bold text-c-foreground">{{ content_types.get('code', 0) }}</p>
-                    <p class="text-xs text-c-subtle mt-1">CODE CHUNKS</p>
+                    <p class="text-3xl font-bold text-c-foreground">{{ total_chunks }}</p>
+                    <p class="text-xs text-c-subtle mt-1">CHUNKS</p>
                 </div>
-                
+
                 <div class="text-center">
                     <p class="text-3xl font-bold text-c-foreground">{{ content_types.get('text', 0) }}</p>
                     <p class="text-xs text-c-subtle mt-1">TEXT CHUNKS</p>
@@ -215,26 +215,22 @@
             </section>
         </div>
         
-        <!-- Indexed Documents Grid (Brutalist Cards) -->
+
+        <!-- Indexed Sources Grid (Brutalist Cards) -->
         <section class="mt-20 max-w-4xl mx-auto">
             <h2 class="text-2xl font-semibold text-c-foreground mb-6 text-center">
-                {% if documents %}
-                    {{ documents | length }} Indexed Document{{ 's' if documents | length != 1 else '' }}
+                {% if source_groups %}
+                    {{ source_groups | length }} Indexed Source{{ 's' if source_groups | length != 1 else '' }}
                 {% else %}
-                    No Indexed Documents Yet
+                    No Indexed Sources Yet
                 {% endif %}
             </h2>
 
-            {% if documents %}
+            {% if source_groups %}
             <div id="document-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {% for doc in documents %}
-                {% set doc_meta = doc.metadata or {} %}
-                {% set dl_meta = doc_meta.get('dl_meta', {}) %}
-                {% set origin = dl_meta.get('origin', {}) %}
-                {% set filename = origin.get('filename') or doc_meta.get('source', 'Document') %}
-                {% set location = doc_meta.get('source', 'Unknown source') %}
-                {% set headings = dl_meta.get('headings', []) %}
-                {% set status = doc_meta.get('status', 'Indexed') %}
+                {% for source in source_groups %}
+                {% set filename = source.filenames[0] if source.filenames else source.source %}
+                {% set status = source.status %}
                 {% set status_lower = status | lower %}
                 {% if status_lower in ['pending', 'processing'] %}
                     {% set status_class = 'text-c-pending' %}
@@ -246,28 +242,30 @@
 
                 <div class="p-5 brutalist-block brutalist-block-interactive cursor-pointer text-left">
                     <div class="flex justify-between items-start">
-                        <h3 class="text-base font-semibold text-c-foreground truncate w-4/5" title="{{ filename }}">{{ filename }}</h3>
+                        <h3 class="text-base font-semibold text-c-foreground truncate w-4/5" title="{{ filename }}">{{ filename}}</h3>
                         <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-c-surface {{ status_class }} rounded-none border-2 border-c-shadow" style="box-shadow: 2px 2px 0 0 var(--c-shadow);">
                             {{ status | capitalize }}
                         </span>
                     </div>
-                    <p class="text-xs text-c-subtle mt-1 mb-3" title="{{ location }}">{{ location }}</p>
+                    <p class="text-xs text-c-subtle mt-1 mb-3" title="{{ source.source }}">{{ source.source }}</p>
                     <div class="flex justify-between text-sm text-c-foreground opacity-70">
-                        <span>{{ "{:,}".format(doc.page_content | length) }} chars</span>
-                        <span>{{ headings | length }} heading{{ '' if headings | length == 1 else 's' }}</span>
+                        <span>{{ "{:,}".format(source.total_chars) }} chars</span>
+                        <span>{{ source.heading_count }} heading{{ '' if source.heading_count == 1 else 's' }}</span>
                     </div>
+                    <p class="text-sm text-c-foreground opacity-80 mt-3">{{ source.preview[:180] }}{% if source.preview|length > 180 %}...{% endif %}</p>
+                    {% if source.chunk_count > 1 %}
+                        <p class="text-xs text-c-subtle mt-2">{{ source.chunk_count }} chunk{{ '' if source.chunk_count == 1 else 's' }} from this source</p>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
             {% else %}
             <div class="p-6 brutalist-block text-c-subtle">
-                <p class="text-lg">No documents are currently indexed in the "{{ collection_name }}" collection.</p>
-                <p class="text-sm mt-2">Use the PyRAG CLI to index some documents, then refresh this page.</p>
+                <p class="text-lg">No sources are currently indexed in the "{{ collection_name }}" collection.</p>
+                <p class="text-sm mt-2">Use the PyRAG CLI to index content, then refresh this page.</p>
             </div>
             {% endif %}
         </section>
-
-
         <!-- Custom Modal for Alerts (Brutalist Style) -->
         <div id="status-modal" class="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center hidden" onclick="hideModal()">
             <div class="brutalist-block p-6 w-11/12 max-w-sm" onclick="event.stopPropagation()">

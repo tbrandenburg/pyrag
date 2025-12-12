@@ -31,6 +31,8 @@ The Makefile provides automated workflows for managing agents:
 - **`make test`**: Execute full test agent suite
 - **`make build`**: Package building agent
 - **`make run`**: CLI agent execution with arguments
+- **`make run-web`**: Start the web interface agent
+- **`make run-mcp`**: Start the MCP server agent
 - **`make install`**: Dependency management agent
 - **`make clean`**: Cleanup and maintenance agent
 

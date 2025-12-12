@@ -34,6 +34,10 @@ uv run python scripts/verify_installation.py
 # 3. Search your documents
 uv run pyrag --add /path/to/your/documents --query "What is this about?"
 uv run pyrag --add https://arxiv.org/pdf/2408.09869 --query "Which are the main AI models in Docling?"
+
+# 4. Use the web interface (optional)
+make run-web  # or: uv run pyrag-web
+# Open http://localhost:8000 in your browser
 ```
 
 ## Installation

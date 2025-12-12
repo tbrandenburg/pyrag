@@ -35,6 +35,7 @@ dependencies = [
     "uvicorn>=0.24.0",
     "jinja2>=3.1.2",
     "python-multipart>=0.0.6",
+    "fastmcp>=0.5.0",
 ]
 
 [dependency-groups]
@@ -52,6 +53,7 @@ Source = "https://github.com/tbrandenburg/pyrag"
 [project.scripts]
 pyrag = "pyrag.cli:main"
 "pyrag-web" = "pyrag.web:main"
+"pyrag-mcp" = "pyrag.mcp:main"
 
 [tool.uv]
 package = true

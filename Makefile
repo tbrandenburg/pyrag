@@ -1,7 +1,7 @@
 # PyRAG Makefile
 # Provides common development tasks for the PyRAG project
 
-.PHONY: help lint format test unit-test system-test qa build run clean install
+.PHONY: help lint format test unit-test system-test qa build run run-web run-mcp clean install
 
 # Default target
 help:
@@ -20,6 +20,8 @@ help:
 	@echo "Build & Run:"
 	@echo "  build     Build the package"
 	@echo "  run       Run the CLI application"
+	@echo "  run-web   Start the web interface"
+	@echo "  run-mcp   Start the MCP server"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  install   Install/sync dependencies"
@@ -71,6 +73,14 @@ run:
 	else \
 		uv run pyrag $(ARGS); \
 	fi
+
+run-web:
+	@echo "🌐 Starting PyRAG web interface..."
+	uv run pyrag-web
+
+run-mcp:
+	@echo "🔌 Starting PyRAG MCP server..."
+	uv run pyrag-mcp
 
 # Maintenance Tasks
 install:

@@ -8,7 +8,7 @@ help:
 	@echo "PyRAG Development Tasks"
 	@echo "======================"
 	@echo ""
-Quality Assurance:
+	@echo "Quality Assurance:"
 	@echo "  format      Format code with ruff"
 	@echo "  lint        Run ruff linter"
 	@echo "  test        Run all tests"

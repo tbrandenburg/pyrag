@@ -92,3 +92,7 @@ milvus_storage/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# User
+*.log
+*.db

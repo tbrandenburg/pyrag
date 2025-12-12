@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
@@ -13,11 +14,15 @@ from .rag import RAG
 # Default collection name (avoiding config.py import due to langchain_docling dependency)
 DEFAULT_COLLECTION_NAME = "rag"
 
-# Setup templates
+# Setup templates and static files
 templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+static_dir = os.path.join(templates_dir, "static")
 templates = Jinja2Templates(directory=templates_dir)
 
 app = FastAPI(title="PyRAG API", description="Document indexing and search API")
+
+# Mount static files
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 class DocumentResponse(BaseModel):

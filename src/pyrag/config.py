@@ -1,5 +1,8 @@
 """Configuration constants for PyRAG."""
 
+import os
+
+from dotenv import load_dotenv
 from langchain_docling.loader import ExportType
 
 # Supported Docling file extensions
@@ -36,6 +39,19 @@ DEFAULT_TOP_K = 5
 DEFAULT_MAX_TOKENS = 128  # Conservative limit well under 256 token model limit
 DEFAULT_OVERLAP_TOKENS = 10  # Minimal overlap to avoid token buildup
 DEFAULT_MILVUS_URI = "milvus_storage/docling.db"
+
+# Load environment configuration once so downstream modules can reuse it
+load_dotenv()
+
+# Effective configuration values
+MILVUS_URI = os.getenv("MILVUS_URI", DEFAULT_MILVUS_URI)
+
+
+def resolve_milvus_uri(override: str | None = None) -> str:
+    """Return the Milvus URI, honoring an explicit override when provided."""
+
+    return override or MILVUS_URI
+
 
 # Ensemble retriever configuration
 DEFAULT_VECTOR_WEIGHT = 0.7  # 70% vector retrieval weight

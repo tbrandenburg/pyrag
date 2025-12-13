@@ -2,7 +2,6 @@
 
 from docling.chunking import HybridChunker
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
-from dotenv import load_dotenv
 from langchain_classic.retrievers.ensemble import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
 from langchain_docling import DoclingLoader
@@ -15,11 +14,11 @@ from .config import (
     DEFAULT_EMBED_MODEL,
     DEFAULT_EXPORT_TYPE,
     DEFAULT_MAX_TOKENS,
-    DEFAULT_MILVUS_URI,
     DEFAULT_OVERLAP_TOKENS,
     DEFAULT_RANK_FUSION_CONSTANT,
     DEFAULT_TOP_K,
     DEFAULT_VECTOR_WEIGHT,
+    resolve_milvus_uri,
 )
 from .storage import BaseVectorStorage, MilvusStorage
 from .utils import get_supported_files
@@ -34,7 +33,7 @@ class RAG:
         embed_model: str = DEFAULT_EMBED_MODEL,
         collection_name: str = DEFAULT_COLLECTION_NAME,
         top_k: int = DEFAULT_TOP_K,
-        milvus_uri: str = DEFAULT_MILVUS_URI,
+        milvus_uri: str | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         overlap_tokens: int = DEFAULT_OVERLAP_TOKENS,
     ):
@@ -44,7 +43,7 @@ class RAG:
         self.top_k = top_k
         self.max_tokens = max_tokens
         self.overlap_tokens = overlap_tokens
-        self.milvus_uri = milvus_uri
+        self.milvus_uri = resolve_milvus_uri(milvus_uri)
         self.indexed_documents = None
         self.vectorstore = None
 
@@ -134,7 +133,6 @@ class RAG:
 
     def index(self, input_path: str):
         """Index documents using the RAG pipeline."""
-        load_dotenv()
         file_paths = get_supported_files(input_path)
 
         documents = self.load(file_paths)

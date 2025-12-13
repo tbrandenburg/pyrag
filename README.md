@@ -95,6 +95,9 @@ uv run pyrag --add /path/to/documents --collection my_collection
 
 # Get help
 uv run pyrag --help
+
+# Launch the MCP server (stdio or http)
+uv run pyrag-mcp --type http --port 5179
 ```
 
 ### Python Module

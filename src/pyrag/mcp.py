@@ -111,6 +111,7 @@ def _serve(
         8000,
         "--port",
         "-p",
+        min=1,
         help="Port to bind when using the HTTP transport",
     ),
 ) -> None:
@@ -119,6 +120,10 @@ def _serve(
     transport_name = transport.lower()
     if transport_name not in {"stdio", "http"}:
         raise typer.BadParameter("Transport must be either 'stdio' or 'http'")
+
+    if transport_name == "stdio":
+        mcp.run(transport=transport_name)
+        return
 
     mcp.run(transport=transport_name, port=port)
 

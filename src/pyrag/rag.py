@@ -1,5 +1,7 @@
 """Main RAG pipeline implementation."""
 
+import os
+
 from docling.chunking import HybridChunker
 from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 from dotenv import load_dotenv
@@ -34,17 +36,20 @@ class RAG:
         embed_model: str = DEFAULT_EMBED_MODEL,
         collection_name: str = DEFAULT_COLLECTION_NAME,
         top_k: int = DEFAULT_TOP_K,
-        milvus_uri: str = DEFAULT_MILVUS_URI,
+        milvus_uri: str | None = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         overlap_tokens: int = DEFAULT_OVERLAP_TOKENS,
     ):
+        load_dotenv()
+        env_milvus_uri = os.getenv("MILVUS_URI")
+
         self.export_type = export_type
         self.embed_model = embed_model
         self.collection_name = collection_name
         self.top_k = top_k
         self.max_tokens = max_tokens
         self.overlap_tokens = overlap_tokens
-        self.milvus_uri = milvus_uri
+        self.milvus_uri = milvus_uri or env_milvus_uri or DEFAULT_MILVUS_URI
         self.indexed_documents = None
         self.vectorstore = None
 

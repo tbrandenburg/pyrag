@@ -128,6 +128,7 @@ PyRAG uses sensible defaults but can be customized:
 - **Collection name**: `docling_retriever_demo`
 - **Top-k results**: `5`
 - **Storage directory**: `milvus_storage/`
+- **Milvus URI override**: set `MILVUS_URI` to point at an existing Milvus TCP/HTTP endpoint (defaults to local storage)
 - **Hybrid search**: Automatic BM25 + vector retrieval (70% vector, 30% BM25 weights)
 - **Rank fusion constant**: `60`
 

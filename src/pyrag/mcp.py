@@ -1,5 +1,6 @@
 """Minimal MCP interface for PyRAG tools."""
 
+import typer
 from fastmcp import FastMCP
 
 from .config import DEFAULT_COLLECTION_NAME, DEFAULT_TOP_K
@@ -98,10 +99,39 @@ def search(
     }
 
 
+def _serve(
+    transport: str = typer.Option(
+        "stdio",
+        "--type",
+        "-t",
+        case_sensitive=False,
+        help="Transport type for the MCP server (stdio or http)",
+    ),
+    port: int = typer.Option(
+        8000,
+        "--port",
+        "-p",
+        min=1,
+        help="Port to bind when using the HTTP transport",
+    ),
+) -> None:
+    """Entry point for launching the MCP server."""
+
+    transport_name = transport.lower()
+    if transport_name not in {"stdio", "http"}:
+        raise typer.BadParameter("Transport must be either 'stdio' or 'http'")
+
+    if transport_name == "stdio":
+        mcp.run(transport=transport_name)
+        return
+
+    mcp.run(transport=transport_name, port=port)
+
+
 def main() -> None:
     """Entry point for launching the MCP server."""
 
-    mcp.run()
+    typer.run(_serve)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ from pyrag.rag import RAG
 class TestDoclingPaper:
     """System tests using the Docling paper from ArXiv."""
 
-    ARXIV_URL = "https://arxiv.org/pdf/2408.09869"
+    ARXIV_URL = "https://arxiv.org/pdf/2303.13988"  # 6 pages
     DEFAULT_QUERY = "Which are the main AI models in Docling?"
 
     @pytest.fixture

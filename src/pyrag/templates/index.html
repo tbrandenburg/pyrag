@@ -157,22 +157,22 @@
             <!-- Indexing Statistics Display -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 brutalist-block text-c-foreground">
                 <div class="text-center">
-                    <p class="text-3xl font-bold text-c-accent">{{ total_sources }}</p>
+                    <p id="stat-sources" class="text-3xl font-bold text-c-accent">{{ total_sources }}</p>
                     <p class="text-xs text-c-subtle mt-1">SOURCES</p>
                 </div>
 
                 <div class="text-center">
-                    <p class="text-3xl font-bold text-c-foreground">{{ total_chunks }}</p>
+                    <p id="stat-chunks" class="text-3xl font-bold text-c-foreground">{{ total_chunks }}</p>
                     <p class="text-xs text-c-subtle mt-1">CHUNKS</p>
                 </div>
 
                 <div class="text-center">
-                    <p class="text-3xl font-bold text-c-foreground">{{ content_types.get('text', 0) }}</p>
+                    <p id="stat-text-chunks" class="text-3xl font-bold text-c-foreground">{{ content_types.get('text', 0) }}</p>
                     <p class="text-xs text-c-subtle mt-1">TEXT CHUNKS</p>
                 </div>
                 
                 <div class="text-center">
-                    <p class="text-3xl font-bold text-c-accent">{{ content_types.get('table', 0) }}</p>
+                    <p id="stat-table-chunks" class="text-3xl font-bold text-c-accent">{{ content_types.get('table', 0) }}</p>
                     <p class="text-xs text-c-subtle mt-1">TABLE CHUNKS</p>
                 </div>
             </div>
@@ -231,7 +231,7 @@
 
         <!-- Indexed Sources Grid (Brutalist Cards) -->
         <section id="document-section" class="mt-20 max-w-4xl mx-auto">
-            <h2 class="text-2xl font-semibold text-c-foreground mb-6 text-center">
+            <h2 id="indexed-sources-heading" class="text-2xl font-semibold text-c-foreground mb-6 text-center">
                 {% if source_groups %}
                     {{ source_groups | length }} Indexed Source{{ 's' if source_groups | length != 1 else '' }}
                 {% else %}
@@ -454,10 +454,34 @@
                 }
 
                 updateCardStatus(card, 'Finished');
+                await refreshStats();
             } catch (error) {
                 console.error('Indexing failed', error);
                 updateCardStatus(card, 'Failed', error.message);
                 showModal('Indexing Failed', `Failed to index <code>${source}</code>.<br>${error.message}`);
+            }
+        }
+
+        async function refreshStats() {
+            try {
+                const params = new URLSearchParams({ collection_name: collectionName });
+                const response = await fetch(`/stats?${params}`);
+                if (!response.ok) return;
+                const stats = await response.json();
+                
+                document.getElementById('stat-sources').textContent = stats.total_sources;
+                document.getElementById('stat-chunks').textContent = stats.total_chunks;
+                document.getElementById('stat-text-chunks').textContent = stats.content_types.text || 0;
+                document.getElementById('stat-table-chunks').textContent = stats.content_types.table || 0;
+                
+                const heading = document.getElementById('indexed-sources-heading');
+                if (stats.source_count === 0) {
+                    heading.textContent = 'No Indexed Sources Yet';
+                } else {
+                    heading.textContent = `${stats.source_count} Indexed Source${stats.source_count !== 1 ? 's' : ''}`;
+                }
+            } catch (error) {
+                console.error('Failed to refresh stats', error);
             }
         }
 

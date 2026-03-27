@@ -176,6 +176,25 @@ def index_document(request: IndexRequest):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.get("/stats")
+def get_stats(
+    collection_name: str = Query(
+        DEFAULT_COLLECTION_NAME, description="Milvus collection name"
+    ),
+):
+    """Return indexing statistics as JSON for frontend updates."""
+    try:
+        data = discover_documents(collection_name)
+        return {
+            "total_sources": data.total_sources,
+            "total_chunks": data.total_chunks,
+            "content_types": data.content_types,
+            "source_count": len(data.source_groups),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 def discover_documents(collection_name: str) -> DiscoveryResponse:
     """Discover and analyze all indexed documents in the collection."""
     try:

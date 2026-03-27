@@ -126,8 +126,8 @@ class TestDoclingPaper:
             collection_name="test_e2e_pipeline", milvus_uri=str(storage_dir / "docling.db"), top_k=3
         )
 
-        # Run the indexing pipeline and then query
-        pipeline.index(str(docling_paper_path))
+        # Run the indexing pipeline using URL and then query
+        pipeline.index(self.ARXIV_URL)
         results = pipeline.query(self.DEFAULT_QUERY)
 
         # Verify end-to-end functionality

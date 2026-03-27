@@ -1,5 +1,6 @@
 """Web interface for PyRAG using FastAPI."""
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Any
@@ -11,6 +12,8 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from .rag import RAG
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_COLLECTION_NAME = "rag"
 
@@ -183,8 +186,22 @@ def index(
             },
         )
     except Exception as e:
-        # Fallback to error template or simple HTML
-        return f"<html><body><h1>Error</h1><p>{str(e)}</p></body></html>"
+        logger.exception("Error loading index page: %s", str(e))
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "collection_name": collection_name,
+                "total_sources": 0,
+                "total_chunks": 0,
+                "content_types": {},
+                "sources": [],
+                "filenames": [],
+                "total_content_length": 0,
+                "source_groups": [],
+                "error": "Unable to load documents. Please try again later.",
+            },
+        )
 
 
 @app.post("/index")
@@ -194,8 +211,17 @@ def index_document(request: IndexRequest, http_request: Request):
         rag = _get_rag(request.collection_name, http_request.app.state.rag_cache)
         rag.index(request.path)
         return {"status": "finished"}
+    except ValueError as e:
+        logger.warning("Invalid input for document indexing: %s", str(e))
+        raise HTTPException(
+            status_code=400, detail="Invalid input provided. Please check the file path or URL."
+        ) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Error during document indexing: %s", str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="An internal error occurred. Please try again later.",
+        ) from e
 
 
 @app.get("/stats")
@@ -214,7 +240,10 @@ def get_stats(
             "source_count": len(data.source_groups),
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Error loading stats: %s", str(e))
+        raise HTTPException(
+            status_code=500, detail="An internal error occurred while loading statistics."
+        ) from e
 
 
 def discover_documents(collection_name: str, rag: RAG) -> DiscoveryResponse:
@@ -247,7 +276,10 @@ def discover_documents(collection_name: str, rag: RAG) -> DiscoveryResponse:
             source_groups=analysis["source_groups"],
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.exception("Error discovering documents: %s", str(e))
+        raise HTTPException(
+            status_code=500, detail="An internal error occurred while discovering documents."
+        ) from e
 
 
 def main():

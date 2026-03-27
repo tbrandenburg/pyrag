@@ -18,8 +18,6 @@ templates_dir = os.path.join(os.path.dirname(__file__), "templates")
 static_dir = os.path.join(templates_dir, "static")
 templates = Jinja2Templates(directory=templates_dir)
 
-_rag_cache: dict[str, RAG] = {}
-
 
 def _get_rag(collection_name: str, rag_cache: dict[str, RAG]) -> RAG:
     """Get (or create) a cached RAG instance for the given collection."""
@@ -190,10 +188,10 @@ def index(
 
 
 @app.post("/index")
-def index_document(request: IndexRequest, app_state: Request):
+def index_document(request: IndexRequest, http_request: Request):
     """Index a document path or URL and return completion status."""
     try:
-        rag = _get_rag(request.collection_name, app_state.app.state.rag_cache)
+        rag = _get_rag(request.collection_name, http_request.app.state.rag_cache)
         rag.index(request.path)
         return {"status": "finished"}
     except Exception as e:

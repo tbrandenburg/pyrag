@@ -1,6 +1,7 @@
 """Web interface for PyRAG using FastAPI."""
 
 import os
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -11,15 +12,37 @@ from pydantic import BaseModel
 
 from .rag import RAG
 
-# Default collection name (avoiding config.py import due to langchain_docling dependency)
 DEFAULT_COLLECTION_NAME = "rag"
 
-# Setup templates and static files
 templates_dir = os.path.join(os.path.dirname(__file__), "templates")
 static_dir = os.path.join(templates_dir, "static")
 templates = Jinja2Templates(directory=templates_dir)
 
-app = FastAPI(title="PyRAG API", description="Document indexing and search API")
+_rag_cache: dict[str, RAG] = {}
+
+
+def _get_rag(collection_name: str, rag_cache: dict[str, RAG]) -> RAG:
+    """Get (or create) a cached RAG instance for the given collection."""
+    rag = rag_cache.get(collection_name)
+    if rag is None:
+        rag = RAG(collection_name=collection_name)
+        rag_cache[collection_name] = rag
+    return rag
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize RAG cache at startup and clean up at shutdown."""
+    app.state.rag_cache: dict[str, RAG] = {}
+    yield
+    app.state.rag_cache.clear()
+
+
+app = FastAPI(
+    title="PyRAG API",
+    description="Document indexing and search API",
+    lifespan=lifespan,
+)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -145,7 +168,8 @@ def index(
 ):
     """Root endpoint showing discovery of all indexed documents."""
     try:
-        data = discover_documents(collection_name)
+        rag = _get_rag(collection_name, request.app.state.rag_cache)
+        data = discover_documents(collection_name, rag)
         return templates.TemplateResponse(
             "index.html",
             {
@@ -166,10 +190,10 @@ def index(
 
 
 @app.post("/index")
-def index_document(request: IndexRequest):
+def index_document(request: IndexRequest, app_state: Request):
     """Index a document path or URL and return completion status."""
     try:
-        rag = RAG(collection_name=request.collection_name)
+        rag = _get_rag(request.collection_name, app_state.app.state.rag_cache)
         rag.index(request.path)
         return {"status": "finished"}
     except Exception as e:
@@ -178,13 +202,13 @@ def index_document(request: IndexRequest):
 
 @app.get("/stats")
 def get_stats(
-    collection_name: str = Query(
-        DEFAULT_COLLECTION_NAME, description="Milvus collection name"
-    ),
+    request: Request,
+    collection_name: str = Query(DEFAULT_COLLECTION_NAME, description="Milvus collection name"),
 ):
     """Return indexing statistics as JSON for frontend updates."""
     try:
-        data = discover_documents(collection_name)
+        rag = _get_rag(collection_name, request.app.state.rag_cache)
+        data = discover_documents(collection_name, rag)
         return {
             "total_sources": data.total_sources,
             "total_chunks": data.total_chunks,
@@ -195,10 +219,9 @@ def get_stats(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-def discover_documents(collection_name: str) -> DiscoveryResponse:
+def discover_documents(collection_name: str, rag: RAG) -> DiscoveryResponse:
     """Discover and analyze all indexed documents in the collection."""
     try:
-        rag = RAG(collection_name=collection_name)
         documents = rag.discover()
 
         if not documents:

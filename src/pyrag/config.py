@@ -41,3 +41,9 @@ DEFAULT_MILVUS_URI = "milvus_storage/docling.db"
 DEFAULT_VECTOR_WEIGHT = 0.7  # 70% vector retrieval weight
 DEFAULT_BM25_WEIGHT = 0.3  # 30% BM25 retrieval weight
 DEFAULT_RANK_FUSION_CONSTANT = 60  # Default rank fusion constant
+
+# Security configuration
+ALLOWED_URL_SCHEMES = frozenset({"http", "https"})
+ALLOWED_BASE_PATHS: list[str] = []
+# Empty ALLOWED_BASE_PATHS = only URLs allowed
+# Set paths like ["/data", "/documents"] to enable local file access

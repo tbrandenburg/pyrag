@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from .rag import RAG
+from .utils import PathValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,9 @@ def index_document(request: IndexRequest, http_request: Request):
         rag = _get_rag(request.collection_name, http_request.app.state.rag_cache)
         rag.index(request.path)
         return {"status": "finished"}
+    except PathValidationError as e:
+        logger.warning("Security validation failed for document indexing: %s", str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except ValueError as e:
         logger.warning("Invalid input for document indexing: %s", str(e))
         raise HTTPException(

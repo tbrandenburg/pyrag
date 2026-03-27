@@ -5,6 +5,7 @@ from fastmcp import FastMCP
 
 from .config import DEFAULT_COLLECTION_NAME, DEFAULT_TOP_K
 from .rag import RAG
+from .utils import PathValidationError
 
 mcp = FastMCP("PyRAG 🤖")
 
@@ -55,10 +56,12 @@ def _document_summary(document) -> dict[str, str]:
 @mcp.tool
 def add_doc(path: str) -> dict[str, str]:
     """Index a file, URL, or directory."""
-
     rag = _get_rag()
-    rag.index(path)
-    return {"ok": "indexed", "source": path}
+    try:
+        rag.index(path)
+        return {"ok": "indexed", "source": path}
+    except PathValidationError as e:
+        raise ValueError(f"Security validation failed: {e}") from e
 
 
 @mcp.tool

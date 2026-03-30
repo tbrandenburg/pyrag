@@ -1,5 +1,6 @@
 """Configuration constants for PyRAG."""
 
+import os
 from langchain_docling.loader import ExportType
 
 # Supported Docling file extensions
@@ -44,6 +45,12 @@ DEFAULT_RANK_FUSION_CONSTANT = 60  # Default rank fusion constant
 
 # Security configuration
 ALLOWED_URL_SCHEMES = frozenset({"http", "https"})
+
+# Initialize ALLOWED_BASE_PATHS from environment or use empty default
 ALLOWED_BASE_PATHS: list[str] = []
+if env_paths := os.environ.get("ALLOWED_BASE_PATHS"):
+    ALLOWED_BASE_PATHS = [path.strip() for path in env_paths.split(":") if path.strip()]
+
 # Empty ALLOWED_BASE_PATHS = only URLs allowed
 # Set paths like ["/data", "/documents"] to enable local file access
+# Or set ALLOWED_BASE_PATHS environment variable with colon-separated paths

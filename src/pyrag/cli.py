@@ -143,12 +143,12 @@ def main_command(
         console.print("  or combine actions as needed")
         return
 
-    rag = RAG(
-        top_k=top_k,
-        collection_name=collection_name,
-    )
-
     try:
+        rag = RAG(
+            top_k=top_k,
+            collection_name=collection_name,
+        )
+
         # Reset vector storage if requested
         if reset:
             rag.reset()
@@ -238,7 +238,14 @@ def main_command(
                 "[bold blue]Documents indexed successfully. Use --query to search them.[/bold blue]"
             )
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        msg = str(e)
+        if "opened by another program" in msg or "Open local milvus failed" in msg:
+            console.print(
+                "[bold red]Error:[/bold red] The vector database is locked by another process. "
+                "Stop any other running PyRAG instances and try again."
+            )
+        else:
+            console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1) from e
 
 

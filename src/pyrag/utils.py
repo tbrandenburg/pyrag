@@ -83,6 +83,8 @@ def get_supported_files(path_or_url: str, exclude_patterns: list[str] | None = N
         path_or_url: Path to file/directory or URL to index.
         exclude_patterns: Optional list of fnmatch patterns matched against paths
             relative to the root directory. E.g. ``["*.md", "temp/*"]``.
+            Note: ``*`` matches any character including ``/``, so ``temp/*``
+            excludes all files under ``temp/`` at any depth.
 
     Raises:
         PathValidationError: If path/URL fails security validation

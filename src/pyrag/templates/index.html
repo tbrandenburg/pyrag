@@ -431,7 +431,7 @@
             return card;
         }
 
-        async function indexSource(source, card) {
+        async function indexSource(source, card, excludePatterns = []) {
             updateCardStatus(card, 'In Progress');
             try {
                 const response = await fetch('/index', {
@@ -442,6 +442,7 @@
                     body: JSON.stringify({
                         path: source,
                         collection_name: collectionName,
+                        exclude_patterns: excludePatterns,
                     }),
                 });
 
@@ -494,6 +495,10 @@
 
         async function indexDocuments() {
             const sources = document.getElementById('doc-source').value.trim();
+            const filterValue = document.getElementById('exclude-filter').value.trim();
+            const excludePatterns = filterValue
+                ? filterValue.split(',').map(p => p.trim()).filter(p => p !== '')
+                : [];
 
             if (sources === "") {
                 showModal("Input Required", "Please enter at least one file path or URL to index.");
@@ -504,7 +509,7 @@
 
             for (const source of sourceArray) {
                 const card = addDocumentCard(source, 'In Progress');
-                await indexSource(source, card);
+                await indexSource(source, card, excludePatterns);
             }
         }
 

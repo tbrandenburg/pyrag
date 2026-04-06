@@ -1,5 +1,6 @@
 """Utility functions for PyRAG."""
 
+import fnmatch
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -71,12 +72,17 @@ def validate_path_security(path_or_url: str) -> None:
         )
 
 
-def get_supported_files(path_or_url: str):
+def get_supported_files(path_or_url: str, exclude_patterns: list[str] | None = None):
     """
     Returns a list of valid input files:
     - URL → [URL] (if scheme is allowed)
     - File → [file] (if within allowed base paths)
     - Directory → recursively collect supported file types (if within allowed base paths)
+
+    Args:
+        path_or_url: Path to file/directory or URL to index.
+        exclude_patterns: Optional list of fnmatch patterns matched against paths
+            relative to the root directory. E.g. ``["*.md", "temp/*"]``.
 
     Raises:
         PathValidationError: If path/URL fails security validation
@@ -95,9 +101,15 @@ def get_supported_files(path_or_url: str):
             raise ValueError(f"Unsupported filetype for Docling: {p.suffix}")
 
     if p.is_dir():
-        files = [
-            str(f) for f in p.rglob("*") if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
-        ]
+        files = []
+        for f in p.rglob("*"):
+            if not f.is_file() or f.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                continue
+            if exclude_patterns:
+                rel = str(f.relative_to(p))
+                if any(fnmatch.fnmatch(rel, pat) for pat in exclude_patterns):
+                    continue
+            files.append(str(f))
         if not files:
             raise ValueError(f"No supported files found under directory: {p}")
         return files

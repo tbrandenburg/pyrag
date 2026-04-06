@@ -81,6 +81,7 @@ class TestStatsEndpointErrorHandling:
     def test_returns_sanitized_error_on_exception(self, client):
         """Test that GET /stats returns sanitized error for internal errors."""
         from unittest.mock import MagicMock
+
         from pyrag.web import DEFAULT_COLLECTION_NAME
 
         mock_rag = MagicMock()

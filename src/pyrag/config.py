@@ -1,6 +1,7 @@
 """Configuration constants for PyRAG."""
 
 import os
+
 from langchain_docling.loader import ExportType
 
 # Supported Docling file extensions

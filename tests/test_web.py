@@ -99,6 +99,63 @@ class TestStatsEndpointErrorHandling:
         assert "internal error" in detail.lower()
 
 
+class TestIndexDocumentExcludePatterns:
+    """Test that exclude_patterns is accepted and forwarded correctly."""
+
+    def test_exclude_patterns_forwarded_to_rag_index(self, client):
+        """POST /index forwards exclude_patterns to rag.index()."""
+        from unittest.mock import MagicMock
+
+        mock_rag = MagicMock()
+        mock_rag.index.return_value = None
+        client.app.state.rag_cache = {"rag": mock_rag}
+
+        response = client.post(
+            "/index",
+            json={
+                "path": "/some/path",
+                "collection_name": "rag",
+                "exclude_patterns": ["*.md", "temp/*"],
+            },
+        )
+
+        assert response.status_code == 200
+        mock_rag.index.assert_called_once_with("/some/path", exclude_patterns=["*.md", "temp/*"])
+
+    def test_exclude_patterns_defaults_to_empty_list(self, client):
+        """POST /index accepts requests without exclude_patterns (defaults to empty)."""
+        from unittest.mock import MagicMock
+
+        mock_rag = MagicMock()
+        mock_rag.index.return_value = None
+        client.app.state.rag_cache = {"rag": mock_rag}
+
+        response = client.post(
+            "/index",
+            json={"path": "/some/path", "collection_name": "rag"},
+        )
+
+        assert response.status_code == 200
+        # exclude_patterns=[] → falsy → forwarded as None
+        mock_rag.index.assert_called_once_with("/some/path", exclude_patterns=None)
+
+    def test_empty_exclude_patterns_forwarded_as_none(self, client):
+        """POST /index with empty exclude_patterns list forwards None to rag.index()."""
+        from unittest.mock import MagicMock
+
+        mock_rag = MagicMock()
+        mock_rag.index.return_value = None
+        client.app.state.rag_cache = {"rag": mock_rag}
+
+        response = client.post(
+            "/index",
+            json={"path": "/some/path", "collection_name": "rag", "exclude_patterns": []},
+        )
+
+        assert response.status_code == 200
+        mock_rag.index.assert_called_once_with("/some/path", exclude_patterns=None)
+
+
 class TestDiscoverDocumentsErrorHandling:
     """Test error handling in discover_documents function."""
 

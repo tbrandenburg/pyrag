@@ -132,10 +132,10 @@ class RAG:
         # Ensure we return only top_k results (EnsembleRetriever might return more)
         return results[: self.top_k]
 
-    def index(self, input_path: str):
+    def index(self, input_path: str, exclude_patterns: list[str] | None = None):
         """Index documents using the RAG pipeline."""
         load_dotenv()
-        file_paths = get_supported_files(input_path)
+        file_paths = get_supported_files(input_path, exclude_patterns=exclude_patterns)
 
         documents = self.load(file_paths)
         chunks = self.chunk(documents)

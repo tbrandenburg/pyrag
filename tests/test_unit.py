@@ -8,6 +8,7 @@ import pytest
 from langchain_core.documents import Document
 
 from pyrag.rag import RAG
+from pyrag.utils import get_supported_files
 
 
 @pytest.fixture
@@ -185,7 +186,7 @@ def test_rag_index_method(sample_pdf, temp_milvus_uri):
         assert rag.vectorstore is not None
         assert rag.indexed_documents is not None
         assert len(rag.indexed_documents) == 1
-        mock_get_files.assert_called_once_with(sample_pdf)
+        mock_get_files.assert_called_once_with(sample_pdf, exclude_patterns=None)
 
 
 def test_rag_query_method(temp_milvus_uri):
@@ -271,3 +272,98 @@ def test_rag_discover_method(temp_milvus_uri):
     rag.reset()
     result = rag.discover()
     assert result == []
+
+
+# ── get_supported_files: exclude_patterns ─────────────────────────────────────
+
+
+@pytest.fixture
+def temp_dir_with_files(tmp_path):
+    """Create a temp directory with a mix of supported files for filtering tests."""
+    (tmp_path / "report.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+    (tmp_path / "summary.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+    subdir = tmp_path / "temp"
+    subdir.mkdir()
+    (subdir / "notes.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+    (subdir / "draft.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+    return tmp_path
+
+
+def test_get_supported_files_no_exclude(temp_dir_with_files):
+    """With no patterns, all supported files are returned."""
+    with patch("pyrag.utils.ALLOWED_BASE_PATHS", [str(temp_dir_with_files)]):
+        result = get_supported_files(str(temp_dir_with_files))
+    assert len(result) == 4  # report.pdf, summary.pdf, temp/notes.pdf, temp/draft.pdf
+
+
+def test_get_supported_files_exclude_glob_extension(temp_dir_with_files):
+    """Pattern *.pdf via fnmatch excludes all PDFs (including nested), leaving no files."""
+    with (
+        patch("pyrag.utils.ALLOWED_BASE_PATHS", [str(temp_dir_with_files)]),
+        pytest.raises(ValueError, match="No supported files found"),
+    ):
+        # Excluding all *.pdf raises ValueError because no supported files remain
+        get_supported_files(str(temp_dir_with_files), exclude_patterns=["*.pdf"])
+
+
+def test_get_supported_files_exclude_subdir(temp_dir_with_files):
+    """Pattern temp/* excludes files inside the temp subdirectory."""
+    with patch("pyrag.utils.ALLOWED_BASE_PATHS", [str(temp_dir_with_files)]):
+        result = get_supported_files(str(temp_dir_with_files), exclude_patterns=["temp/*"])
+    paths = [Path(p).name for p in result]
+    assert "notes.pdf" not in paths
+    assert "draft.pdf" not in paths
+    assert "report.pdf" in paths
+    assert "summary.pdf" in paths
+
+
+def test_get_supported_files_exclude_specific_file(temp_dir_with_files):
+    """Pattern matching a specific filename excludes only that file."""
+    with patch("pyrag.utils.ALLOWED_BASE_PATHS", [str(temp_dir_with_files)]):
+        result = get_supported_files(str(temp_dir_with_files), exclude_patterns=["report.pdf"])
+    paths = [Path(p).name for p in result]
+    assert "report.pdf" not in paths
+    assert "notes.pdf" in paths
+    assert "summary.pdf" in paths
+
+
+def test_get_supported_files_non_matching_patterns_keep_all(temp_dir_with_files):
+    """Patterns that don't match anything leave files untouched."""
+    with patch("pyrag.utils.ALLOWED_BASE_PATHS", [str(temp_dir_with_files)]):
+        result = get_supported_files(
+            str(temp_dir_with_files), exclude_patterns=["*.docx", "other/*"]
+        )
+    assert len(result) == 4
+
+
+def test_get_supported_files_empty_patterns_list(temp_dir_with_files):
+    """Empty list has no filtering effect."""
+    with patch("pyrag.utils.ALLOWED_BASE_PATHS", [str(temp_dir_with_files)]):
+        result = get_supported_files(str(temp_dir_with_files), exclude_patterns=[])
+    assert len(result) == 4
+
+
+def test_get_supported_files_none_patterns(temp_dir_with_files):
+    """None patterns has no filtering effect."""
+    with patch("pyrag.utils.ALLOWED_BASE_PATHS", [str(temp_dir_with_files)]):
+        result = get_supported_files(str(temp_dir_with_files), exclude_patterns=None)
+    assert len(result) == 4
+
+
+def test_rag_index_forwards_exclude_patterns(sample_pdf, temp_milvus_uri):
+    """RAG.index() forwards exclude_patterns to get_supported_files."""
+    rag = RAG(milvus_uri=temp_milvus_uri, collection_name="test_collection")
+
+    with (
+        patch("pyrag.rag.get_supported_files") as mock_get_files,
+        patch("pyrag.rag.DoclingLoader") as mock_loader,
+    ):
+        mock_get_files.return_value = [sample_pdf]
+        test_docs = [Document(page_content="content", metadata={"source": sample_pdf})]
+        mock_instance = Mock()
+        mock_instance.load.return_value = test_docs
+        mock_loader.return_value = mock_instance
+
+        rag.index(sample_pdf, exclude_patterns=["*.md", "temp/*"])
+
+        mock_get_files.assert_called_once_with(sample_pdf, exclude_patterns=["*.md", "temp/*"])

@@ -68,6 +68,7 @@ class SourceGroupResponse(BaseModel):
 class IndexRequest(BaseModel):
     path: str
     collection_name: str = DEFAULT_COLLECTION_NAME
+    exclude_patterns: list[str] = []
 
 
 class DiscoveryResponse(BaseModel):
@@ -210,7 +211,7 @@ def index_document(request: IndexRequest, http_request: Request):
     """Index a document path or URL and return completion status."""
     try:
         rag = _get_rag(request.collection_name, http_request.app.state.rag_cache)
-        rag.index(request.path)
+        rag.index(request.path, exclude_patterns=request.exclude_patterns or None)
         return {"status": "finished"}
     except PathValidationError as e:
         logger.warning("Security validation failed for document indexing: %s", str(e))

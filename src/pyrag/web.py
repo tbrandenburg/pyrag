@@ -174,9 +174,9 @@ def index(
         rag = _get_rag(collection_name, request.app.state.rag_cache)
         data = discover_documents(collection_name, rag)
         return templates.TemplateResponse(
+            request,
             "index.html",
             {
-                "request": request,
                 "collection_name": data.collection_name,
                 "total_sources": data.total_sources,
                 "total_chunks": data.total_chunks,
@@ -190,9 +190,9 @@ def index(
     except Exception as e:
         logger.exception("Error loading index page: %s", str(e))
         return templates.TemplateResponse(
+            request,
             "index.html",
             {
-                "request": request,
                 "collection_name": collection_name,
                 "total_sources": 0,
                 "total_chunks": 0,

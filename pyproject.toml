@@ -23,8 +23,8 @@ dependencies = [
     "docling>=2.62.0",
     "huggingface-hub>=0.36.0",
     "sentence-transformers>=3.0.1",
-    "transformers>=4.0.0,<5.0.0",
-    "torch>=1.13.0,<2.3.0",
+    "transformers>=4.0.0,<6.0.0",
+    "torch>=1.13.0,<3.0.0",
     "onnxruntime>=1.18.0",
     "milvus-lite>=2.4.7",
     "python-dotenv>=1.0.1",
@@ -63,8 +63,7 @@ constraint-dependencies = [
     "setuptools<81",
     # pymilvus 2.6.4+ changed connection lifecycle, breaking milvus_lite usage
     "pymilvus<2.6.4",
-    # starlette 1.0.0 changed TemplateResponse API; web.py uses old-style API
-    "starlette<1.0.0",
+    # starlette constraint removed; FastAPI's Jinja2Templates handles both API styles
 ]
 
 [tool.hatch.build.targets.wheel]

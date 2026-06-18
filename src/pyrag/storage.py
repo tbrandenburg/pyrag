@@ -227,7 +227,8 @@ class MilvusStorage(BaseVectorStorage):
             embedding_function=self.embeddings,
             collection_name=self.collection_name,
             connection_args={"uri": self.uri},
-            enable_dynamic_field=True,
+            text_field="text",
+            metadata_field="metadata",
         )
 
     def drop(self, collection: str):
@@ -297,10 +298,11 @@ class MilvusStorage(BaseVectorStorage):
             embedding=self.embeddings,
             collection_name=collection,
             connection_args={"uri": self.uri},
-            index_params={"index_type": "FLAT"},
+            index_params={"index_type": "FLAT", "metric_type": "COSINE"},
             drop_old=False,
             ids=ids,
-            enable_dynamic_field=True,
+            text_field="text",
+            metadata_field="metadata",
         )
         self.vectorstore = vectorstore
 
